@@ -50,6 +50,7 @@ nnoremap <silent> <C-p> :call fzf#vim#files('.', {'options': '--prompt ""'})<CR>
 nnoremap <silent> <leader>b :Buffers<CR>
 
 " NERDTREE settings
+autocmd BufEnter * lcd %:p:h
 autocmd StdinReadPre * let s:std_in=1
 autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 map <C-n> :NERDTreeToggle<CR>
