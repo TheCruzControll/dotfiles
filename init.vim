@@ -1,5 +1,6 @@
 call plug#begin()
 Plug 'sheerun/vim-polyglot'
+Plug 'scrooloose/nerdcommenter'
 Plug '/usr/local/opt/fzf'
 Plug 'junegunn/fzf.vim'
 Plug 'sainnhe/gruvbox-material'
@@ -12,7 +13,7 @@ call plug#end()
 set termguicolors
 set background=dark
 let g:gruvbox_material_background = 'soft'
-
+let mapleader = "\<Space>"
 colorscheme gruvbox-material
 set number relativenumber
 " Lightline settings
@@ -53,3 +54,13 @@ autocmd StdinReadPre * let s:std_in=1
 autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 map <C-n> :NERDTreeToggle<CR>
 let NERDTreeDirArrows = 1
+vmap ++ <plug>NERDCommenterToggle
+nmap ++ <plug>NERDCommenterToggle
+nnoremap U <C-R> # redo
+
+"Turn quit into \q
+nnoremap <leader>q :q!<cr>
+"Turn save quit into \z
+nnoremap <leader>z :wq<cr>
+"turn w into \w
+nnoremap <leader>w :w<cr>
