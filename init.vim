@@ -1,98 +1,155 @@
 call plug#begin()
 Plug 'SirVer/ultisnips'
-Plug 'mhinz/vim-startify'
-Plug 'alvan/vim-closetag'
 Plug 'ryanoasis/vim-devicons'
 Plug 'junegunn/vim-emoji'
-" tabular plugin is used to format tables
-Plug 'godlygeek/tabular'
-" JSON front matter highlight plugin
-Plug 'elzr/vim-json'
-Plug 'plasticboy/vim-markdown'
-Plug 'iamcco/markdown-preview.nvim', { 'do': { -> mkdp#util#install() }}
+Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
+Plug 'luochen1990/rainbow'
+Plug 'mhinz/vim-startify'
+
 Plug 'airblade/vim-gitgutter'
-Plug 'yuezk/vim-js'
-Plug 'maxmellon/vim-jsx-pretty'
+Plug 'othree/yajs.vim'
+Plug 'leafgarland/typescript-vim' " TypeScript syntax
+" Plug 'herringtondarkholme/yats.vim'
+Plug 'MaxMEllon/vim-jsx-pretty'
+Plug 'peitalin/vim-jsx-typescript'
+
 Plug 'scrooloose/nerdcommenter'
 Plug 'tpope/vim-fugitive'
 Plug 'christoomey/vim-tmux-navigator'
 Plug '/usr/local/opt/fzf'
-Plug 'ryanoasis/vim-devicons'
 Plug 'junegunn/fzf.vim'
-Plug 'arcticicestudio/nord-vim', { 'branch': 'develop' }
-Plug 'Shougo/vimproc.vim', {'do' : 'make'}
+" Plug 'arcticicestudio/nord-vim', { 'branch': 'develop' }
+Plug 'cocopon/iceberg.vim'
+Plug 'gkeep/iceberg-dark'
+" Plug 'morhetz/gruvbox'
+" Plug 'dracula/vim', { 'as': 'dracula' }
+" Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 Plug 'preservim/nerdtree'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'jiangmiao/auto-pairs'
+Plug 'Xuyuanp/nerdtree-git-plugin'
 Plug 'dense-analysis/ale'
+Plug 'jremmen/vim-ripgrep'
 call plug#end()
+
 set guifont=Fira\ Code:h12
+syntax enable
 set background=dark
 set termguicolors
 let mapleader = "\<Space>"
-colorscheme nord
+" colorscheme gruvbox
+" colorscheme nord
+colorscheme iceberg
+" colorscheme dracula
 set number relativenumber
+" let g:airline_theme='nord'
+let g:airline_theme='icebergDark'
 
-" FZF floating window
-let $FZF_DEFAULT_COMMAND =  "find * -path '*/\.*' -prune -o -path 'node_modules/**' -prune -o -path 'target/**' -prune -o -path 'dist/**' -prune -o  -type f -print -o -type l -print 2> /dev/null"
-let $FZF_DEFAULT_OPTS=' --color=dark --color=fg:15,bg:-1,hl:1,fg+:#ffffff,bg+:0,hl+:1 --color=info:0,prompt:0,pointer:12,marker:4,spinner:11,header:-1 --layout=reverse  --margin=1,4'
-let g:fzf_layout = { 'window': 'call FloatingFZF()' }
+set title                                               " tab title as file name
+set noshowmode                                          " dont show current mode below statusline
+au BufEnter * set fo-=c fo-=r fo-=o                     " stop annoying auto commenting on new lines
+hi clear CursorLineNr                                   " use the theme color for relative number
 
-function! FloatingFZF()
-  let buf = nvim_create_buf(v:false, v:true)
-  call setbufvar(buf, '&signcolumn', 'no')
 
-  let height = float2nr(10)
-  let width = float2nr(80)
-  let horizontal = float2nr((&columns - width) / 2)
-  let vertical = 1
+" performance tweaks
+set nocursorline
+set nocursorcolumn
+set scrolljump=5
+set lazyredraw
+set redrawtime=10000
+set synmaxcol=180
+set re=1
+set cursorline
 
-  let opts = {
-        \ 'relative': 'editor',
-        \ 'row': vertical,
-        \ 'col': horizontal,
-        \ 'width': width,
-        \ 'height': height,
-        \ 'style': 'minimal'
-        \ }
+" required by coc
+set hidden
+set nobackup
+set nowritebackup
+set cmdheight=2
+set updatetime=300
+set shortmess+=c
+set signcolumn=yes
 
-  call nvim_open_win(buf, v:true, opts)
+" trigger `autoread` when files changes on disk
+set autoread
+autocmd FocusGained,BufEnter,CursorHold,CursorHoldI * if mode() != 'c' | checktime | endif
+
+" notification after file change
+autocmd FileChangedShellPost *
+\ echohl WarningMsg | echo "File changed on disk. Buffer reloaded." | echohl None
+
+let g:magit_default_fold_level=2
+let g:magit_show_help=1
+nnoremap <leader>m :Magit<return>
+
+" ==========FZF==========
+let g:fzf_layout = { 'window': 'call CreateCenteredFloatingWindow()' }
+let $FZF_DEFAULT_OPTS="--reverse "
+
+" files window with preview
+command! -bang -nargs=? -complete=dir Files
+        \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
+
+function! RipgrepFzf(query, fullscreen)
+    let command_fmt = 'rg --column --line-number --no-heading --color=always --smart-case %s || true'
+    let initial_command = printf(command_fmt, shellescape(a:query))
+    let reload_command = printf(command_fmt, '{q}')
+    let spec = {'options': ['--phony', '--query', a:query, '--bind', 'change:reload:'.reload_command]}
+    call fzf#vim#grep(initial_command, 1, fzf#vim#with_preview(spec), a:fullscreen)
+endfunction
+command! -nargs=* -bang Rgp call RipgrepFzf(<q-args>, <bang>0)
+
+" floating fzf window with borders
+function! CreateCenteredFloatingWindow()
+    let width = min([&columns - 4, max([80, &columns - 20])])
+    let height = min([&lines - 4, max([20, &lines - 10])])
+    let top = ((&lines - height) / 2) - 1
+    let left = (&columns - width) / 2
+    let opts = {'relative': 'editor', 'row': top, 'col': left, 'width': width, 'height': height, 'style': 'minimal'}
+
+    let top = "╭" . repeat("─", width - 2) . "╮"
+    let mid = "│" . repeat(" ", width - 2) . "│"
+    let bot = "╰" . repeat("─", width - 2) . "╯"
+    let lines = [top] + repeat([mid], height - 2) + [bot]
+    let s:buf = nvim_create_buf(v:false, v:true)
+    call nvim_buf_set_lines(s:buf, 0, -1, v:true, lines)
+    call nvim_open_win(s:buf, v:true, opts)
+    set winhl=Normal:Floating
+    let opts.row += 1
+    let opts.height -= 2
+    let opts.col += 2
+    let opts.width -= 4
+    call nvim_open_win(nvim_create_buf(v:false, v:true), v:true, opts)
+    au BufWipeout <buffer> exe 'bw '.s:buf
+    execute 'set winblend=' . 15
 endfunction
 
-" FZF binding remapping
-nnoremap <silent> <C-p> :call fzf#vim#files('.', {'options': '--prompt ""'})<CR>
-nnoremap <silent> <leader>b :Buffers<CR>
 
-" NERDTREE settings
-" autocmd StdinReadPre * let s:std_in=1
-" autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
-autocmd BufEnter * lcd %:p:h
-map <C-n> :NERDTreeToggle<CR>
-let NERDTreeDirArrows = 1
-vmap ++ <plug>NERDCommenterToggle
-nmap ++ <plug>NERDCommenterToggle
-nnoremap U <C-R> 
+let g:airline_section_x=''
+let g:airline_section_y=''
+let g:airline_section_z=''
+let g:coc_global_extensions = [
+  \ 'coc-snippets',
+  \ 'coc-pairs',
+  \ 'coc-tsserver',
+  \ 'coc-json', 
+  \ 'coc-eslint',
+  \ 'coc-prettier',
+  \ 'coc-tslint',
+  \ ]
+
 
 "Turn quit into \q
 nnoremap <leader>q :q!<cr>
-"Turn save quit into \z
+" Turn save quit into \z
 nnoremap <leader>z :wq<cr>
 "turn w into \w
 nnoremap <leader>w :w<cr>
 
-" go back into file from terminal
- tnoremap jj <C-\><C-n>
-
-" Split window
-nmap ss :split<Return><C-w>w
-nmap sv :vsplit<Return><C-w>w
-map  <leader>l :tabn<CR>
-map <leader>h :tabp<CR>
-map  <leader>n  :tabnew<CR>
-
 " ale
 let g:ale_sign_highlight_linenrs = 1
-let g:ale_linters = {'python': ['flake8', 'pylint'], 'rust': ['rls'], }
+let g:ale_linters = {'python': ['flake8', 'pylint'], 'rust': ['rls'], 'javascript': ['eslint'],'typescript': ['tsserver', 'tslint'],}
 let g:ale_sign_error = emoji#for('no_entry_sign')
 let g:ale_sign_warning = emoji#for('poop')
 let g:formatdef_eslint = '"eslint-formatter"'
@@ -114,12 +171,6 @@ set sidescrolloff=15
 set sidescroll=1
 " Highlight matching pairs of brackets. Use the '%' character to jump between them.
 set matchpairs+=<:>
-
-inoremap jk <ESC>
-
-" j/k will move virtual lines (lines that wrap)
-noremap <silent> <expr> j (v:count == 0 ? 'gj' : 'j')
-noremap <silent> <expr> k (v:count == 0 ? 'gk' : 'k')
 
 set relativenumber
 
@@ -156,5 +207,67 @@ let g:NERDSpaceDelims = 1
 let g:NERDCommentEmptyLines = 1
 " Use compact syntax for prettified multi-line comments
 let g:NERDCompactSexyComs = 1
-source $HOME/.config/nvim/statusline.vim
+let g:airline_powerline_fonts = 1
+set  runtimepath+=/usr/local/opt/fzf
+au BufNewFile,BufRead *.ts setlocal filetype=typescript
+au BufNewFile,BufRead *.tsx setlocal filetype=typescript.tsx
+autocmd BufEnter *.{js,jsx,ts,tsx} :syntax sync fromstart
+autocmd BufLeave *.{js,jsx,ts,tsx} :syntax sync clear
+let g:rainbow_active = 1
+let g:rainbow_conf = {
+\	'guifgs': ['gold', 'orchid', 'LightSkyBlue']
+\}
+
+
+" Add `:OR` command for organize imports of the current buffer.
+function! ShowDocIfNoDiagnostic(timer_id)
+  if (coc#util#has_float() == 0)
+    silent call CocActionAsync('doHover')
+  endif
+endfunction
+
+
+function! s:show_hover_doc()
+  call timer_start(500, 'ShowDocIfNoDiagnostic')
+endfunction
+
+
+" general
+nnoremap <C-p> :Files<return>
+nnoremap <leader>p :Rgp<return>
+map <C-n> :NERDTreeToggle<CR>
+let NERDTreeDirArrows = 1
+vmap ++ <plug>NERDCommenterToggle
+nmap ++ <plug>NERDCommenterToggle
+nnoremap U <C-R> 
+nmap ss :split<Return><C-w>w
+nmap sv :vsplit<Return><C-w>w
+inoremap jk <ESC>
+noremap <silent> <expr> j (v:count == 0 ? 'gj' : 'j')
+noremap <silent> <expr> k (v:count == 0 ? 'gk' : 'k')
+nnoremap \ :noh<return>
+nnoremap <silent> K :call CocAction('doHover')<CR>
+command! -nargs=0 OR   :call     CocAction('runCommand', 'editor.action.organizeImport')
+" new line in normal mode and back
+map <Enter> o<ESC>
+map <S-Enter> O<ESC>
+autocmd CursorHoldI * :call <SID>show_hover_doc()
+autocmd CursorHold * :call <SID>show_hover_doc()
+
+nnoremap gb <C-^>
+nnoremap <silent> <space>e :<C-u>CocList diagnostics<cr>
+" Remap keys for gotos
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+nmap <silent> [g <Plug>(coc-diagnostic-prev)
+nmap <silent> ]g <Plug>(coc-diagnostic-next)
+nmap <leader>o <Plug>(coc-codeaction)
+nmap <leader>gs :G<return>
+nnoremap <leader>gd :Gdiffsplit<return>
+nmap <leader>gc :Gcommit<return>
+nmap <leader>gp :Gpush<return>
+nmap <leader>gl :diffget //3<CR>
+nmap <leader>gh :diffget //2<CR>
 
