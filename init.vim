@@ -1,11 +1,20 @@
 call plug#begin()
 Plug 'SirVer/ultisnips'
 Plug 'ryanoasis/vim-devicons'
+Plug 'jkramer/vim-checkbox'
 Plug 'junegunn/vim-emoji'
 Plug 'vim-airline/vim-airline'
+Plug 'vuciv/vim-bujo'
+Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
+
+Plug 'junegunn/goyo.vim'
 Plug 'vim-airline/vim-airline-themes'
+Plug 'vimwiki/vimwiki'
+Plug 'iamcco/markdown-preview.nvim', { 'do': { -> mkdp#util#install() }, 'for': ['markdown', 'vim-plug']}
 Plug 'luochen1990/rainbow'
 Plug 'mhinz/vim-startify'
+Plug 'tpope/vim-surround'
+Plug 'psliwka/vim-smoothie'
 
 Plug 'airblade/vim-gitgutter'
 Plug 'othree/yajs.vim'
@@ -79,16 +88,15 @@ autocmd FocusGained,BufEnter,CursorHold,CursorHoldI * if mode() != 'c' | checkti
 autocmd FileChangedShellPost *
 \ echohl WarningMsg | echo "File changed on disk. Buffer reloaded." | echohl None
 
-let g:magit_default_fold_level=2
-let g:magit_show_help=1
-nnoremap <leader>m :Magit<return>
+let g:python3_host_prog = '/usr/local/bin/python3'
+
 
 " ==========FZF==========
 let g:fzf_layout = { 'window': 'call CreateCenteredFloatingWindow()' }
 let $FZF_DEFAULT_OPTS="--reverse "
 
 " files window with preview
-command! -bang -nargs=? -complete=dir Files
+command! -bang -nargs=? -complete=dir GFiles
         \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
 
 function! RipgrepFzf(query, fullscreen)
@@ -126,6 +134,9 @@ function! CreateCenteredFloatingWindow()
 endfunction
 
 
+
+
+" ========== AIRLINE ==========
 let g:airline_section_x=''
 let g:airline_section_y=''
 let g:airline_section_z=''
@@ -140,14 +151,8 @@ let g:coc_global_extensions = [
   \ ]
 
 
-"Turn quit into \q
-nnoremap <leader>q :q!<cr>
-" Turn save quit into \z
-nnoremap <leader>z :wq<cr>
-"turn w into \w
-nnoremap <leader>w :w<cr>
 
-" ale
+" ========== ALE ==========
 let g:ale_sign_highlight_linenrs = 1
 let g:ale_linters = {'python': ['flake8', 'pylint'], 'rust': ['rls'], 'javascript': ['eslint'],'typescript': ['tsserver', 'tslint'],}
 let g:ale_sign_error = emoji#for('no_entry_sign')
@@ -163,9 +168,11 @@ let g:ale_python_flake8_executable = 'python3'
 let g:ale_sign_column_always = 1
 let g:ale_echo_cursor = 1
 
-set mouse=v
-" ================ Scrolling ========================
 
+
+
+" ========== Scrolling ==========
+set mouse=v
 set scrolloff=8         "Start scrolling when we're 8 lines away from margins
 set sidescrolloff=15
 set sidescroll=1
@@ -189,34 +196,37 @@ set backspace=indent,eol,start
 set noswapfile
 set nobackup
 set nowb
+
+
+
+
 let g:nord_cursor_line_number_background = 1
 " Trigger configuration. Do not use <tab> if you use https://github.com/Valloric/YouCompleteMe.
 let g:UltiSnipsExpandTrigger="<tab>"  " use <Tab> trigger autocompletion
 " do not close the preview tab when switching to other buffers
-let g:mkdp_auto_close = 0
-" disable header folding
-let g:vim_markdown_folding_disabled = 1
 
-" do not use conceal feature, the implementation is not so good
-let g:mkdp_auto_start = 1
-let g:vim_markdown_conceal = 0
-let g:mkdp_echo_preview_url = 1
-let g:indent_guides_enable_on_vim_startup = 1
 " Add spaces after comment delimiters by default
 let g:NERDSpaceDelims = 1
 let g:NERDCommentEmptyLines = 1
 " Use compact syntax for prettified multi-line comments
 let g:NERDCompactSexyComs = 1
+let NERDTreeShowHidden=1
 let g:airline_powerline_fonts = 1
+
+
 set  runtimepath+=/usr/local/opt/fzf
+
 au BufNewFile,BufRead *.ts setlocal filetype=typescript
 au BufNewFile,BufRead *.tsx setlocal filetype=typescript.tsx
 autocmd BufEnter *.{js,jsx,ts,tsx} :syntax sync fromstart
 autocmd BufLeave *.{js,jsx,ts,tsx} :syntax sync clear
+
+
 let g:rainbow_active = 1
 let g:rainbow_conf = {
 \	'guifgs': ['gold', 'orchid', 'LightSkyBlue']
 \}
+
 
 
 " Add `:OR` command for organize imports of the current buffer.
@@ -231,9 +241,35 @@ function! s:show_hover_doc()
   call timer_start(500, 'ShowDocIfNoDiagnostic')
 endfunction
 
+" ========== VIMWIKI ==========
+let g:vimwiki_list = [{'path': '~/Sync/notes',
+                      \ 'syntax': 'markdown', 'ext': '.md'}]
+autocmd BufRead,BufNewFile ~/Sync/notes/*.md :Goyo 80
+let g:vimwiki_global_ext = 0
+let g:vimwiki_ext2syntax = {'.md': 'markdown', '.markdown': 'markdown', '.mdown': 'markdown'}
+set nocompatible
+filetype plugin indent on
+syntax on
+let g:vimwiki_global_ext = 0
 
-" general
-nnoremap <C-p> :Files<return>
+
+" ========== BUJO ==========
+nnoremap <leader>td :Todo<cr>
+nmap <C-s> <Plug>BujoAddnormal
+imap <C-q> <Plug>BujoAddinsert
+nmap <C-q> <Plug>BujoChecknormal
+imap <C-q> <Plug>BujoCheckinsert
+let g:bujo#window_width = 40
+
+
+" ========== MAPPINGS ==========
+"Turn quit into \q
+nnoremap <leader>q :q!<cr>
+" Turn save quit into \z
+nnoremap <leader>z :wq<cr>
+"turn w into \w
+nnoremap <leader>w :w<cr>
+nnoremap <C-p> :GFiles<return>
 nnoremap <leader>p :Rgp<return>
 map <C-n> :NERDTreeToggle<CR>
 let NERDTreeDirArrows = 1
@@ -249,8 +285,6 @@ nnoremap \ :noh<return>
 nnoremap <silent> K :call CocAction('doHover')<CR>
 command! -nargs=0 OR   :call     CocAction('runCommand', 'editor.action.organizeImport')
 " new line in normal mode and back
-map <Enter> o<ESC>
-map <S-Enter> O<ESC>
 autocmd CursorHoldI * :call <SID>show_hover_doc()
 autocmd CursorHold * :call <SID>show_hover_doc()
 
@@ -270,4 +304,3 @@ nmap <leader>gc :Gcommit<return>
 nmap <leader>gp :Gpush<return>
 nmap <leader>gl :diffget //3<CR>
 nmap <leader>gh :diffget //2<CR>
-
