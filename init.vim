@@ -6,6 +6,8 @@ Plug 'junegunn/vim-emoji'
 Plug 'vim-airline/vim-airline'
 Plug 'vuciv/vim-bujo'
 Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
+Plug 'briancollins/vim-jst'
+Plug 'SirVer/ultisnips'
 
 Plug 'junegunn/goyo.vim'
 Plug 'vim-airline/vim-airline-themes'
@@ -14,7 +16,7 @@ Plug 'iamcco/markdown-preview.nvim', { 'do': { -> mkdp#util#install() }, 'for': 
 Plug 'luochen1990/rainbow'
 Plug 'mhinz/vim-startify'
 Plug 'tpope/vim-surround'
-Plug 'psliwka/vim-smoothie'
+Plug 'tpope/vim-repeat'
 
 Plug 'airblade/vim-gitgutter'
 Plug 'othree/yajs.vim'
@@ -90,6 +92,14 @@ autocmd FileChangedShellPost *
 
 let g:python3_host_prog = '/usr/local/bin/python3'
 
+" Java completion
+autocmd FileType java setlocal omnifunc=javacomplete#Complete
+autocmd FileType java JCEnable
+
+let g:UltiSnipsEditSplit="vertical"
+
+let g:UltiSnipsSnippetDirectories = ['~/.vim/UltiSnips', 'UltiSnips']
+let g:UltiSnipsSnippetsDir="~/.vim/UltiSnips"
 
 " ==========FZF==========
 let g:fzf_layout = { 'window': 'call CreateCenteredFloatingWindow()' }
@@ -141,6 +151,7 @@ let g:airline_section_x=''
 let g:airline_section_y=''
 let g:airline_section_z=''
 let g:coc_global_extensions = [
+  \ 'coc-html',
   \ 'coc-snippets',
   \ 'coc-pairs',
   \ 'coc-tsserver',
@@ -154,7 +165,7 @@ let g:coc_global_extensions = [
 
 " ========== ALE ==========
 let g:ale_sign_highlight_linenrs = 1
-let g:ale_linters = {'python': ['flake8', 'pylint'], 'rust': ['rls'], 'javascript': ['eslint'],'typescript': ['tsserver', 'tslint'],}
+let g:ale_linters = {'python': ['flake8', 'pylint'], 'rust': ['rls'], 'javascript': ['eslint'],'typescript': ['tsserver', 'tslint']}
 let g:ale_sign_error = emoji#for('no_entry_sign')
 let g:ale_sign_warning = emoji#for('poop')
 let g:formatdef_eslint = '"eslint-formatter"'
