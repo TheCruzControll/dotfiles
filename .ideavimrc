@@ -1,0 +1,35 @@
+let mapleader = "\<Space>"
+set NERDTree
+nnoremap <C-n> :NERDTreeToggle<cr>
+nnoremap U <C-R>
+inoremap jk <ESC>
+noremap <silent> <expr> j (v:count == 0 ? 'gj' : 'j')
+noremap <silent> <expr> k (v:count == 0 ? 'gk' : 'k')
+nnoremap <leader>w :w<cr>
+nnoremap <leader>q :q!<cr>
+nnoremap <leader>e :action ShowErrorDescription<cr>
+command! -nargs=0 OR :action OptimizeImports<cr>
+nmap <C-p> :action GotoFile<cr>
+nmap <leader>p :action FindInPath<cr>
+nmap <leader>sv :source ~/.ideavimrc<cr>
+set clipboard
+nnoremap <C-v> :action SplitVertically<CR>
+nnoremap <C-h> <C-w>h
+nnoremap <C-l> <C-w>l
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <leader>] :action GotoNextError<CR>
+nnoremap <leader>[ :action GotoPreviousError<CR>
+set number relativenumber
+nnoremap U <C-R>
+nnoremap \ :noh<CR>
+nnoremap <leader>r :action Refactorings.QuickListPopupAction<CR>
+nnoremap <leader>=  :action ReformatCode<CR>
+nnoremap <leader>o :action OptimizeImports<CR>
+nnoremap <c-t> :action ActivateTerminalToolWindow<CR>
+
+" CheckinFiles                                      
+
+
+
+
