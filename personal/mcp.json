@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mega-challenge": {
+      "url": "https://hq.mega.dev/mcp",
+      "exposure": "direct"
+    }
+  }
+}

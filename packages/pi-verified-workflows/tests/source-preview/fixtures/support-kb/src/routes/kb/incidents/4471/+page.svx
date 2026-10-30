@@ -1,0 +1,8 @@
+---
+layout: runbook
+owner: support desk
+---
+
+# Synthetic preview fixture
+
+This document tests source validation; it contains no real incident data.

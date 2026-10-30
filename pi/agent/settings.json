@@ -1,0 +1,37 @@
+{
+  "lastChangelogVersion": "1.4.0",
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-6.1-sol",
+  "defaultThinkingLevel": "medium",
+  "enabledModels": [
+    "openai/gpt-6.1-sol",
+    "openai/gpt-5.5-pro",
+    "anthropic/claude-sonnet-5-5",
+    "openai/gpt-5.4-mini",
+    "openai/gpt-6-luna"
+  ],
+  "externalEditor": "nvim",
+  "extensions": [
+    "-builtin:llama.cpp"
+  ],
+  "packages": [
+    "npm:pi-agent-browser-native@0.9.6",
+    "npm:@juicesharp/rpiv-ask-user-question@2.15.0",
+    "npm:pi-web-access@0.46.0",
+    "npm:@juicesharp/rpiv-todo@2.15.0",
+    "~/.pi/agent/local-packages/pi-herdr-hybrid",
+    "~/.pi/agent/local-packages/pi-automatic-workflows",
+    "~/.pi/agent/local-packages/pi-verified-workflows",
+    "git:github.com/DietrichGebert/ponytail@96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
+    {
+      "source": "~/.pi/agent/local-packages/pi-durable-handoff",
+      "extensions": [
+        "extensions/durable-handoff.ts"
+      ]
+    }
+  ],
+  "showHardwareCursor": true,
+  "terminal": {
+    "imageWidthCells": 120
+  }
+}

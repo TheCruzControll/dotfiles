@@ -1,0 +1,11 @@
+{
+  "name": "pi-workflow-observer",
+  "private": true,
+  "engines": { "node": ">=22.18.0" },
+  "type": "module",
+  "scripts": {
+    "check": "node --check extension/workflow-observer/index.js && node --check extension/workflow-observer/lib/analyzer.ts && node --check extension/workflow-observer/lib/global-store.ts && node --check extension/workflow-observer/lib/herdr.ts && node --check extension/workflow-observer/lib/workflow-evidence.ts && node --check extension/workflow-observer/lib/session-state.ts",
+    "test": "node --test",
+    "preview:history": "node scripts/review-recent-history.mjs"
+  }
+}

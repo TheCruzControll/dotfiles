@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { makeTask, applyUpdate, reconstruct, ENTRY_TYPE } from '../lib/policy.ts';
+import { scheduleWait, externalOutcome, eligibleWait, createWaitScheduler } from '../lib/waits.ts';
+const make = () => makeTask({taskId:'task',projectRoot:'/project',sessionId:'session',branchAnchor:'root',route:'feature',scope:'check reviewer',reason:'test'});
+const binding = {sessionId:'session',projectRoot:'/project',branchAnchor:'root',branchIds:['root']};
+const input = {id:'job',check:'Read reviewer result',authorization:'Read-only check requested',responseRef:'review:1',nextDue:2000,deadline:10000,maxAttempts:2};
+test('bounded persisted wait and completion gates distinguish submission from acceptance', () => {
+ const task=make();
+ const job=scheduleWait(task,input,binding,0);
+ assert.throws(()=>applyUpdate(task,{action:'stage',value:'completed'}),/not acceptance/);
+ const restored=reconstruct([{type:'custom',customType:ENTRY_TYPE,data:{schemaVersion:1,action:'selected',task}}]);
+ assert.deepEqual(restored.waits,[job]);
+ assert.equal(eligibleWait(task,job,binding),true);
+ for(const bad of [{...binding,sessionId:'fork'},{...binding,projectRoot:'/other'},{...binding,branchIds:[]}]) assert.equal(eligibleWait(task,job,bad),false);
+ for(const bad of [{maxAttempts:21},{nextDue:0},{deadline:8*86400000},{authorization:''}]) assert.throws(()=>scheduleWait(make(),{...input,...bad},binding,0));
+ job.status='checking'; job.attempts=1;
+ externalOutcome(task,{state:'pending-review',responseRef:'review:2',nextDue:3000},2000);
+ assert.equal(job.status,'scheduled');
+ job.status='checking';
+ externalOutcome(task,{state:'approval-needed',responseRef:'review:3'},3000);
+ assert.equal(job.status,'approval-needed');
+ assert.equal(eligibleWait(task,job,binding),false);
+ assert.throws(()=>externalOutcome(task,{state:'accepted',responseRef:'false approval'},3000),/Owner/);
+ // Approval is adapter-owned UI confirmation, never inferred from an external reply.
+ task.externalState='working'; job.status='cancelled';
+ externalOutcome(task,{state:'accepted',responseRef:'review:accepted'},4000);
+ applyUpdate(task,{action:'stage',value:'completed'});
+ assert.equal(job.status,'cancelled');
+});
+test('fake clock scheduler arms once, cancels and does not block the event loop',()=>{
+ let now=1000, timer, fired=0, cleared=0;
+ const scheduler=createWaitScheduler({now:()=>now,setTimer:(fn,delay)=>(timer={fn,delay}),clearTimer:()=>{cleared++;timer=undefined;},tick:()=>fired++});
+ scheduler.arm([{status:'scheduled',nextDue:2000,deadline:5000}]);
+ assert.equal(timer.delay,1000);
+ now=2000;timer.fn();assert.equal(fired,1);
+ scheduler.arm([{status:'scheduled',nextDue:3000,deadline:5000}]);
+ scheduler.stop();assert.equal(cleared,1);
+ scheduler.arm([{status:'cancelled',nextDue:3000}]);assert.equal(timer,undefined);
+});
