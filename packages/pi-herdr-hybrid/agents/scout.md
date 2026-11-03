@@ -2,6 +2,7 @@
 name: scout
 description: Quickly investigates a codebase and reports relevant findings
 tools: read,bash
+model: anthropic/claude-haiku-5-5
 thinking: low
 spawning: false
 auto-exit: true
