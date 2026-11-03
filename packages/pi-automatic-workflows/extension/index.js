@@ -3,6 +3,7 @@ import { scheduleWait, externalOutcome, eligibleWait, createWaitScheduler } from
 import { createChildWriteFence } from "../lib/child-write-fence.ts";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { WORKFLOWS, WORKFLOW_FILES, PRINCIPLE_NAMES } from "../lib/registry.ts";
@@ -251,7 +252,7 @@ export default function automaticWorkflows(pi) {
   function authorizeModel(input, parentModel, previous, effectiveModel) {
     if (!parentModel) return 'Parent model identity is unavailable.';
     const selector = childSelector(input, previous);
-    const allowed = model => baseModel(model) === baseModel(parentModel) || task?.childModelMappings?.some(entry => entry.field === selector.field && entry.role === selector.value && baseModel(entry.model) === baseModel(model));
+    const allowed = model => baseModel(model) === baseModel(parentModel) || (selector.field === 'agent' && baseModel(model) === baseModel(profileModel(selector.value))) || task?.childModelMappings?.some(entry => entry.field === selector.field && entry.role === selector.value && baseModel(entry.model) === baseModel(model));
     if (input.model !== undefined && !allowed(input.model)) return 'Child model override requires an explicitly approved role/model map.';
     if (effectiveModel !== undefined && !allowed(effectiveModel)) return 'Resolved child model requires an explicitly approved role/model map.';
   }
@@ -303,6 +304,16 @@ export default function automaticWorkflows(pi) {
         if (task !== target || task.childRuns.length !== count) throw new Error('Task or launch count changed while approval was pending; request a fresh confirmation.');
         const allowance = approveChildAllowance(task, args.launches);
         append(pi, 'updated', task);
+  // A model pinned in the agent profile frontmatter is owner-authored config, so it counts as approved.
+  function profileModel(agent) {
+    if (!agent) return;
+    const agentDir = process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), '.pi', 'agent');
+    for (const dir of [path.join(process.cwd(), '.pi', 'agents'), path.join(agentDir, 'agents')]) {
+      const file = path.join(dir, `${agent}.md`);
+      if (!fs.existsSync(file)) continue;
+      return fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/)?.[1].match(/^model:\s*(\S+)/m)?.[1];
+    }
+  }
         return { content: text(`Owner approved exactly the next ${args.launches} launches. Recorded total limit: ${allowance.totalLimit}; active limit remains ${MAX_ACTIVE_CHILDREN}. No agents were started.`), details: allowance };
       } catch (error) { return { content: text(String(error)), isError: true }; }
     },
@@ -523,7 +534,7 @@ export default function automaticWorkflows(pi) {
         if (checked.error) return { block: true, reason: checked.error };
         if (checked.isWriter && event.input.mode === 'parallel' && writerDirectories.has(checked.isolation.cwd)) return { block: true, reason: 'Parallel writers cannot share an isolated directory.' };
         if (checked.isWriter) writerDirectories.add(checked.isolation.cwd);
-        step.model ??= parentModel;
+        step.model ??= profileModel(step.agent) ?? parentModel;
         step._workflowTaskId = task.taskId;
       }
       // Every actual internal stage reserves a slot through native admission.
@@ -536,7 +547,7 @@ export default function automaticWorkflows(pi) {
     if (!parentModel) return { block: true, reason: "Parent model identity is unavailable; cannot verify child model inheritance." };
     const modelError = authorizeModel(event.input, parentModel);
     if (modelError) return { block: true, reason: modelError };
-    event.input.model ??= parentModel;
+    event.input.model ??= profileModel(event.input.agent) ?? parentModel;
     event.input._workflowTaskId = task.taskId;
     const isWriter = isLikelyCodeWriter(event.input);
     const isolation = task.isolations?.find((record) => record.cwd === event.input.cwd && validateIsolation(record, { taskId: task.taskId }));
