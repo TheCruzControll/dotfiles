@@ -1,8 +1,16 @@
 {
   "mcpServers": {
+    "cloudflare": {
+      "url": "https://mcp.cloudflare.com/mcp",
+      "oauth": {
+        "scope": "user:read account:read offline_access zone.read dns.read workers-scripts.write"
+      }
+    },
     "mega-challenge": {
-      "url": "https://hq.mega.dev/mcp",
-      "exposure": "direct"
+      "url": "https://hq.mega.dev/mcp"
+    },
+    "openrouter": {
+      "url": "https://mcp.openrouter.ai/mcp"
     }
   }
 }

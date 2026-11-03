@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/skills/rook-loop/scripts/until-done.sh\" --stop-hook",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

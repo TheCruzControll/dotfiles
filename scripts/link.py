@@ -19,10 +19,11 @@ def operations(home, personal=False):
             if source.is_file():
                 links.append((source, agent / folder / source.relative_to(ROOT / 'pi/agent' / folder)))
     for source in sorted((ROOT / 'packages').iterdir()):
-        if source.is_dir():
+        if source.is_dir() and not source.name.startswith('.'):
             links.append((source, agent / 'local-packages' / source.name))
     links.append((ROOT / 'packages/pi-workflow-observer/extension/workflow-observer',
                   agent / 'extensions/workflow-observer'))
+    links.append((ROOT / 'packages/pi-herdr-hybrid/agents', agent / 'agents'))
     for source in sorted((ROOT / 'skills/caveman').iterdir()):
         if source.is_dir():
             links.append((source, home / '.agents/skills' / source.name))

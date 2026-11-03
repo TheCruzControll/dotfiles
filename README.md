@@ -10,13 +10,16 @@ but are **not** installed by the new installer.
 - `nvim/`: active Neovim configuration and `lazy-lock.json`.
 - `herdr/config.toml`: theme, mouse, sound, and Neovim sidebar shortcuts.
 - `pi/agent/`: Pi settings, clickable paths, Herdr state reporter, RTK extension,
-  design skill, and subagent configuration.
+  design and rook-loop skills, pi-sidebar extension, and subagent configuration.
 - `packages/`: exact local source snapshots of Pi Herdr Hybrid, Conductor /
-  Automatic Workflows, Workflow Observer, Durable Handoff and Verified Workflows.
+  Automatic Workflows, Workflow Observer, Durable Handoff, Verified Workflows and
+  pi-sidebar. `packages/pi-herdr-hybrid/agents/` holds the subagent profiles with
+  per-agent model pins; it is linked to `~/.pi/agent/agents`.
   Tests and required upstream notices are retained. See `PROVENANCE.md`.
 - `skills/caveman/`: installed Caveman/Cavecrew and engineering skills, including
   their local changes; upstream Apache-2.0 license is included.
-- `personal/mcp.json`: optional personal MEGA connection, disabled by default.
+- `personal/mcp.json`: optional personal MCP servers (MEGA, Cloudflare, OpenRouter),
+  disabled by default.
 
 Active observers remain enabled, matching the original setup. These tools can
 read session content and some actions launch model-backed sessions; review them
@@ -28,7 +31,7 @@ not a security sandbox or employer approval.
 Do not run dependency installation blindly on an existing machine. These steps
 are separate from config linking and may download or execute third-party code.
 
-Recorded baseline: macOS, Node 24.15.0, Pi 1.4.0, Herdr 0.9.5, Neovim 0.9.4.
+Recorded baseline: macOS, Node 24.15.0, Pi 1.5.0, Herdr 0.9.5, Neovim 0.9.4.
 Use Node 24+ for the combined bundle. The Neovim baseline is old: a newer binary
 is a compatibility change to test, not a promise that all old plugins still work.
 Herdr must be >=0.8.2. Conductor's guarded children require macOS sandbox-exec.
@@ -38,7 +41,7 @@ Install Homebrew using its official instructions if needed. On a fresh Mac:
 ```sh
 brew install node@24 python git gh ripgrep fd tmux
 export PATH="$(brew --prefix node@24)/bin:$PATH"
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.5.0
 ```
 
 Install Neovim using an official release appropriate for the baseline above.
@@ -99,9 +102,9 @@ herdr plugin link "$PWD/packages/pi-herdr-hybrid/herdr-plugin" --enabled
 ```
 
 Only one package should provide the subagent tools. Start Pi inside a Herdr pane.
-Run `/subagents-init` in Pi to install missing bundled agent profiles without
-overwriting existing profiles. Your current machine had no global profile files;
-these are opt-in bundled defaults, not silently installed role/model overrides.
+Subagent profiles are linked from `packages/pi-herdr-hybrid/agents`; no
+`/subagents-init` step is needed. Each profile may pin a `model:`; Conductor treats
+that pin as owner-approved, so children launch on it without a per-task prompt.
 
 The Neovim sidebar plugin's recorded commit was
 `b7c69cab2c1eb8754b505061e942fffc4a557a3e`. The GitHub installer may resolve a newer
