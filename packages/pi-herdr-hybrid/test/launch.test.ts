@@ -478,6 +478,17 @@ function persistPolicy(p: LaunchPlan) {
   return JSON.parse(policy.content);
 }
 
+describe('declared preflight at launch and resume planning', () => {
+  it('refuses missing requirements in both callers and leaves undeclared plans compatible', () => {
+    const fx = makeFixture();
+    assert.throws(() => plan(fx, { preflight: { paths: ['missing-dependency'] } }), /Preflight/);
+    const p = plan(fx, { preflight: { cwd: fx.cwd, executables: ['pi'] } });
+    persistPolicy(p);
+    assert.throws(() => buildResumeLaunchPlan({ sessionPath: p.sessionFile, preflight: { paths: ['missing-dependency'] } }, makeCtx(fx)), /Preflight/);
+    assert.ok(buildResumeLaunchPlan({ sessionPath: p.sessionFile }, makeCtx(fx)));
+  });
+});
+
 describe('saved launch policy and resume contract', () => {
   it('reapplies effective restrictions, role, model, thinking, cwd and agent directory without leaking env', () => {
     const fx = makeFixture();

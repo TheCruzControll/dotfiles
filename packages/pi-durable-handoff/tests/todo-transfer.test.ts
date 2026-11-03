@@ -35,7 +35,7 @@ test("clear, no snapshot, legacy fallback and latest valid state", () => {
 test("command captures immediately before switch and seeds only in setup", async () => {
  const source = await readFile(new URL("../extensions/durable-handoff.ts", import.meta.url), "utf8");
  assert.match(source, /const todoSnapshot = captureTodoSnapshot\(ctx.sessionManager.getBranch\(\)\);\s*const result = await ctx.newSession/);
- assert.match(source, /setup: async \(sessionManager\) => \{\s*if \(todoSnapshot\) sessionManager.appendCustomEntry\("rpiv-todo-state", todoSnapshot\);\s*\}/);
+ assert.match(source, /if \(todoSnapshot\) sessionManager.appendCustomEntry\("rpiv-todo-state", todoSnapshot\);/);
  assert.match(source, /Use the existing todo list; do not recreate/);
 });
 

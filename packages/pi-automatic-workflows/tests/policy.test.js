@@ -128,7 +128,11 @@ test("delegation policy caps active and total reservations", () => {
   for (let i = 0; i < MAX_ACTIVE_CHILDREN; i++) assert.equal(recordChildLaunch(current, `c${i}`, true).allowed, true);
   assert.equal(recordChildLaunch(current, "overflow", true).allowed, false);
   current.childRuns.forEach((run) => { run.status = "completed"; });
-  for (let i = MAX_ACTIVE_CHILDREN; i < MAX_TOTAL_CHILDREN; i++) assert.equal(recordChildLaunch(current, `c${i}`, true).allowed, true);
+  assert.equal(MAX_TOTAL_CHILDREN,16);
+  for (let i = MAX_ACTIVE_CHILDREN; i < MAX_TOTAL_CHILDREN; i++) {
+    assert.equal(recordChildLaunch(current, `c${i}`, true).allowed, true);
+    current.childRuns.at(-1).status = "completed";
+  }
   assert.match(recordChildLaunch(current, "over-total", true).reason, /Total child limit/);
 });
 
@@ -137,9 +141,9 @@ test('owner-approved next-launch allowance survives reconstruction and cannot ov
   for(let i=0;i<MAX_TOTAL_CHILDREN;i++){assert.equal(recordChildLaunch(current,`old-${i}`,true).allowed,true);current.childRuns.at(-1).status='completed';}
   assert.equal(recordChildLaunch(current,'before-approval',true).allowed,false);
   const allowance=approveChildAllowance(current,4);
-  assert.equal(allowance.totalLimit,12);
+  assert.equal(allowance.totalLimit,20);
   const restored=reconstruct([{type:'custom',customType:ENTRY_TYPE,data:{schemaVersion:1,action:'selected',task:current}}]);
-  assert.equal(totalChildLimit(restored),12);
+  assert.equal(totalChildLimit(restored),20);
   for(let i=0;i<4;i++)assert.equal(recordChildLaunch(restored,`new-${i}`,true).allowed,true);
   assert.equal(recordChildLaunch(restored,'excess',true).allowed,false);
   approveChildAllowance(restored,2);
@@ -148,6 +152,18 @@ test('owner-approved next-launch allowance survives reconstruction and cannot ov
   assert.equal(recordChildLaunch(restored,'last-one',true).allowed,true);
   assert.equal(recordChildLaunch(restored,'last-two',true).allowed,true);
   assert.equal(recordChildLaunch(restored,'over-approved',true).allowed,false);
+});
+
+test('valid older allowances retain the default floor without changing recorded approval',()=>{
+  const current=task();
+  approveChildAllowance(current,1);
+  assert.equal(current.launchAllowance.totalLimit,1);
+  assert.equal(totalChildLimit(current),16);
+  for(let i=0;i<16;i++) {
+    assert.equal(recordChildLaunch(current,`default-${i}`,true).allowed,true);
+    current.childRuns.at(-1).status='completed';
+  }
+  assert.equal(recordChildLaunch(current,'seventeenth',true).allowed,false);
 });
 
 test('invalid allowances fail closed and invalid approval amounts cannot mutate a task',()=>{

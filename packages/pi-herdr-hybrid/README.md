@@ -4,7 +4,7 @@ Interactive Pi child TUIs from [modem-dev/pi-herdr-subagents](https://github.com
 
 ## Requirements / installation
 
-Pi 1.4, Node 22+, Herdr >= 0.8.2. Run Pi inside a Herdr pane. One package must own the subagent tool surface; remove other subagent extensions from active package configuration.
+Pi 1.4, Node 22+. Background execution uses pinned npm `pi-subagents@0.84.0` (including the GHSA-6v8j-6w28-2w8r fix). Pane execution additionally requires Herdr >= 0.8.2 and Pi inside a Herdr pane. One package must own the subagent tool surface; remove other subagent extensions from active package configuration.
 
 ```
 # From this package directory:
@@ -16,16 +16,24 @@ Then start a fresh Pi session. `/subagents-init` copies missing bundled profiles
 
 The Herdr plugin retains upstream's `pi-herdr-subagents` identity and static dispatcher contract; the Pi package is named `pi-herdr-hybrid`.
 
+## Execution mode
+
+Background is the default. `/subagents-mode` shows status; `/subagents-mode background|pane|reset` persists future-launch preference in `<agent config dir>/hybrid-execution.json`. Reset restores Background. `executionMode: "background" | "pane"` overrides a single launch or whole workflow. Workflows freeze this choice at start; running children never switch backends.
+
+Unsupported background settings fail before launch with guidance to select Pane explicitly, never an implicit fallback. See [supported mappings and limits](docs/background-mode-blocker.md). Background resume uses the exact receipt `details.id` as `sessionPath`; pane resume uses its retained file path and ignores the default preference. Explicit cross-backend conversion is refused. `subagent_native` offers upstream status/list/interrupt/stop/resume/steer/debug.run/guide management without a competing launch tool. Background results are delivered only by upstream.
+
+Upstream: https://github.com/nicobailon/pi-subagents. Updates require an explicit exact npm version bump, lockfile/security review and contract tests; see the update procedure in the linked boundary document. No runtime copying, dirty-checkout imports, or duplicate host Pi dependencies.
+
 ## Tools
 
-- `subagent({name, task, agent?, fork?, model?, cwd?, interactive?})`: launch a real interactive Pi TUI asynchronously.
-- `subagent_resume({sessionPath, message?, name?, autoExit?})`: resume a retained session in a new pane.
+- `subagent({name, task, executionMode?, agent?, fork?, model?, cwd?, interactive?})`: launch asynchronously using Background or an explicit Pane.
+- `subagent_resume({sessionPath, executionMode?, message?, name?, autoExit?, preflight?})`: resume on its recorded backend; `name`, `autoExit`, and `preflight` are pane-only.
 - `subagent_interrupt({id?, name?})`: interrupt a child's current turn, not kill its pane.
 - `subagents_list`: discover named profiles.
 - `subagent_workflow({action:"start", mode:"parallel"|"chain", steps:[{key,agent?,task,context?,cwd?,model?}]})`: launch a keyed parallel group or sequential chain. At most 16 steps. `context` is `fresh` or `fork`; omit it to use profile defaults.
 - `subagent_workflow({action:"list"|"status"|"cancel", id?})`: inspect or cancel progression. Cancellation requests interruption of running turns, but does not kill panes or prove children stopped. Workflow `interrupts` retains every `{id, late, receipt}` record, including late launches and failures; current-session updates report those receipts. Inspect workflow status for pending or failed requests; repeated cancellation returns the retained history without retrying. Workflows are parent-only, not recursively exposed to children.
 
-New and resumed children open to the parent's right; additional children split the tallest owned child downward instead of repeatedly shrinking the parent. Placement is serialized for parallel launches and preserves focus. Only panes opened by the current client are tracked: reloading Pi does not adopt or rearrange existing panes. Many children will still reduce vertical space.
+In Pane mode, new and resumed children open to the parent's right; additional children split the tallest owned child downward instead of repeatedly shrinking the parent. Placement is serialized for parallel launches and preserves focus. Only panes opened by the current client are tracked: reloading Pi does not adopt or rearrange existing panes. Many children will still reduce vertical space.
 
 Results arrive as async steer messages. Chains pass prior explicit summaries/session paths to the next step as data. Only explicit `completed` outcomes advance. A ping, unreported user exit, crash, or launch failure blocks the workflow. Parent/user requests recovery explicitly using resume or a new workflow; there is no automatic retry or configurable branching engine.
 
@@ -51,6 +59,6 @@ Foundation: modem-dev/pi-herdr-subagents commit 2489019ea678f0b7e3437727a0a5ca15
 
 ## Resume policy and sidebar reporting
 
-New children save a curated, owner-readable (`0600`) `<session>.launch-policy.json` sidecar, not an environment dump. Resume reapplies tools, skill inheritance, role prompt, deny/spawning restrictions, agent directory, cwd, and explicit model/thinking. Keep this trusted sidecar with the session; role text can contain sensitive instructions. Validation checks structure and consistency, not authentication: a valid owner edit can change the policy. It is not a sandbox. Version 2 policies require every field explicitly; `null` records intentionally absent settings (including default tool selection or no deny list), and role text/mode must be a consistent pair. Missing fields, empty restrictions, inconsistent values, and legacy/incomplete policies are refused, never silently resumed unrestricted: launch a fresh explicitly profiled child with curated prior results instead.
+Pane children save a curated, owner-readable (`0600`) `<session>.launch-policy.json` sidecar, not an environment dump. Resume reapplies tools, skill inheritance, role prompt, deny/spawning restrictions, agent directory, cwd, and explicit model/thinking. Keep this trusted sidecar with the session; role text can contain sensitive instructions. Validation checks structure and consistency, not authentication: a valid owner edit can change the policy. It is not a sandbox. Version 2 policies require every field explicitly; `null` records intentionally absent settings (including default tool selection or no deny list), and role text/mode must be a consistent pair. Missing fields, empty restrictions, inconsistent values, and legacy/incomplete policies are refused, never silently resumed unrestricted: launch a fresh explicitly profiled child with curated prior results instead.
 
 Child TUIs keep the installed Herdr reporter's TUI gate and pane-local environment. Normal agent-directory discovery is unchanged. When selecting a different child agent directory, hybrid uses its installed `extensions/herdr-agent-state.ts`, or explicitly loads the original directory's conventional reporter. For reporters installed elsewhere, set `PI_HERDR_REPORTER_EXTENSION` to its absolute path. A missing reporter during an agent-directory override fails planning with setup guidance rather than silently dropping sidebar reporting. Do not configure a second reporter implementation or remove the TUI gate. Resume retains any explicit reporter path. No global settings are changed.

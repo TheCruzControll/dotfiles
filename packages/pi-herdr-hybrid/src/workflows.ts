@@ -1,8 +1,10 @@
+import { readExecutionMode } from './execution.ts';
 import { randomUUID } from 'node:crypto';
 import { Type } from 'typebox';
+import { PreflightSchema, type Preflight } from './preflight.ts';
 import { outcomeStatus } from './child-lifecycle.ts';
 
-export type Step = { key: string; agent?: string; task: string; cwd?: string; model?: string; context?: 'fresh' | 'fork' };
+export type Step = { preflight?: Preflight; key: string; agent?: string; task: string; cwd?: string; model?: string; context?: 'fresh' | 'fork' };
 type Result = { id: string; sessionFile?: string; kind: string; summary?: string; ownership?: 'active' | 'terminal' };
 type InterruptReceipt = { id: string; late: boolean; receipt: unknown };
 type Run = { id: string; mode: 'parallel' | 'chain'; status: 'running' | 'completed' | 'blocked' | 'cancelled'; steps: Step[]; children: Record<string, Result>; next: number; interrupts: InterruptReceipt[]; notificationError?: string };
@@ -147,8 +149,9 @@ export function registerWorkflows(pi: any, spawn: (params: any, ctx: any, signal
     description: 'Start an async parallel group or sequential chain of interactive Herdr children; inspect/list/cancel runs. Only explicit completion advances chains. Council passes use parallel groups; the parent curates cross-exam and writes the memo. Resume children with subagent_resume. Cancellation stops progression and requests interrupts; it does not prove children stopped or kill panes. Every interrupt receipt/error, including late launches, is retained in workflow state and reported for the current session. Results are steered back. No automatic retries. Runs are session-local; audit receipts are persisted.',
     parameters: Type.Object({
       action: Type.Union(['start','list','status','cancel'].map(x => Type.Literal(x))),
+      executionMode: Type.Optional(Type.Union([Type.Literal('background'), Type.Literal('pane')])),
       id: Type.Optional(Type.String()), mode: Type.Optional(Type.Union([Type.Literal('parallel'), Type.Literal('chain')])),
-      steps: Type.Optional(Type.Array(Type.Object({ key: Type.String(), task: Type.String(), agent: Type.Optional(Type.String()), cwd: Type.Optional(Type.String()), model: Type.Optional(Type.String()), context: Type.Optional(Type.Union([Type.Literal('fresh'),Type.Literal('fork')])) }), { minItems: 1, maxItems: 16 }))
+      steps: Type.Optional(Type.Array(Type.Object({ preflight: Type.Optional(PreflightSchema), key: Type.String(), task: Type.String(), agent: Type.Optional(Type.String()), cwd: Type.Optional(Type.String()), model: Type.Optional(Type.String()), context: Type.Optional(Type.Union([Type.Literal('fresh'),Type.Literal('fork')])) }), { minItems: 1, maxItems: 16 }))
     }),
     async execute(_id: string, args: any, _signal: any, _update: any, context: any) {
       let result: any;
@@ -156,7 +159,7 @@ export function registerWorkflows(pi: any, spawn: (params: any, ctx: any, signal
         if (!args.mode || !args.steps) throw Error('start requires mode and steps');
         const current = generation;
         const local = manager;
-        result = await local.start(args.mode, args.steps, { signal: _signal ?? undefined, context });
+        result = await local.start(args.mode, args.steps.map((step: any) => ({ ...step, executionMode: args.executionMode ?? readExecutionMode() })),  { signal: _signal ?? undefined, context });
         if (current !== generation) throw Error('Session changed during launch');
         pi.appendEntry('hybrid-workflow', result);
       } else if (args.action === 'list') result = [...manager.runs.values()];

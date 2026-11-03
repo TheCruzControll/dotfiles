@@ -1,13 +1,14 @@
 import fs from "node:fs";
-import { scheduleWait, externalOutcome, eligibleWait, createWaitScheduler } from '../lib/waits.ts';
+import { continuationStore, equivalentSelection } from '../lib/continuation.ts';
+import { scheduleWait, externalOutcome, eligibleWait, createWaitScheduler, reconcileWait, completionGate } from '../lib/waits.ts';
 import { createChildWriteFence } from "../lib/child-write-fence.ts";
 import path from "node:path";
-import crypto from "node:crypto";
 import os from "node:os";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { WORKFLOWS, WORKFLOW_FILES, PRINCIPLE_NAMES } from "../lib/registry.ts";
-import { ENTRY_TYPE, ROUTE_EVENT, applyUpdate, canRemind, isEngineeringIntent, isLikelyCodeWriter, makeTask, promptFor, reconstruct, reserveChildRuns, requestedLaunches, recordChildComplete, recordChildToolResult, applyChildLifecycle, MAX_ACTIVE_CHILDREN, totalChildLimit, approveChildAllowance } from "../lib/policy.ts";
+import { ENTRY_TYPE, ROUTE_EVENT, applyUpdate, canRemind, isEngineeringIntent, isLikelyCodeWriter, makeTask, promptFor, reconstruct, reserveChildRuns, requestedLaunches, recordChildComplete, recordChildToolResult, applyChildLifecycle, MAX_ACTIVE_CHILDREN, MAX_TOTAL_CHILDREN, totalChildLimit, approveChildAllowance } from "../lib/policy.ts";
 import { prepareIsolation, validateIsolation } from "../lib/isolation.ts";
 import { REVISION_STORE, activateCandidate, beginCandidate, findBuildingCandidate, completeCandidateBuild, loadActiveRevision, loadPinnedRevision, recoverPromotionLock, rollbackRevision, validateCandidate, candidateEvaluationContext, submitBehavioralReport, acceptPendingBehavioralReport } from "../lib/revisions.ts";
 
@@ -24,7 +25,7 @@ function candidateCoordinator(ctx) {
   return id;
 }
 function optedOut(cwd) { return fs.existsSync(path.join(cwd, ".pi-workflows-off")); }
-function append(pi, action, task) {
+function persistEntry(pi, action, task) {
   const entry = { schemaVersion: 1, action, task: structuredClone(task) };
   pi.appendEntry(ENTRY_TYPE, entry);
   try {
@@ -39,14 +40,33 @@ function loadRoute(route, resourceRoot = path.join(root, "workflows")) {
   if (!resource) throw new Error(`Workflow resource is not registered: ${route}`);
   const filename = path.resolve(resourceRoot, `${resource}.md`);
   if (!filename.startsWith(`${path.resolve(resourceRoot)}${path.sep}`)) throw new Error("Workflow path is outside the trusted registry.");
-  const content = fs.readFileSync(filename, "utf8").replace(/\]\(\.\.\/principles\/([a-z0-9-]+\.md)\)/g, (_match, leaf) => `](${path.resolve(resourceRoot, "..", "principles", leaf)})`);
+  const content = fs.readFileSync(filename, "utf8")
+    .replace(/\beight total launches\b/g, `${MAX_TOTAL_CHILDREN} total launches by default; use existing allowance before requesting more`)
+    .replace(/\]\(\.\.\/principles\/([a-z0-9-]+\.md)\)/g, (_match, leaf) => `](${path.resolve(resourceRoot, "..", "principles", leaf)})`);
   return `${record.summary}\n\n${content}`;
 }
 export default function automaticWorkflows(pi) {
   const writeFence = createChildWriteFence(pi, fileURLToPath(import.meta.url));
   pi.on("user_bash", (event, ctx) => writeFence.userBash(event, ctx));
   const revisionStore = process.env.PI_AUTOMATIC_WORKFLOWS_REVISION_STORE ? path.resolve(process.env.PI_AUTOMATIC_WORKFLOWS_REVISION_STORE) : REVISION_STORE;
+  const transfers = continuationStore(revisionStore);
+  function append(pi, action, task) {
+    transfers.invalidate(task);
+    persistEntry(pi, action, task);
+  }
+  function owner() { return !ownershipRejected && (!task || (currentCtx && transfers.owns(task, sessionId(currentCtx)))); }
+  let ownershipRejected = false;
+  // Also guard direct tool execution, not only model tool_call dispatch.
+  const registerTool = definition => pi.registerTool({ ...definition, async execute(...args) {
+    if (!owner()) return { content: text('Workflow belongs to another session; explicit continuation transfer required.'), details: { error: 'Workflow ownership rejected.' }, isError: true };
+    return definition.execute(...args);
+  } });
   let task;
+  function friction(eventType, source) {
+    if (!task) return;
+    const ref = crypto.createHash('sha256').update(JSON.stringify([task.taskId, task.revision, eventType, source])).digest('hex');
+    try { pi.events.emit(ROUTE_EVENT, { schemaVersion: 1, eventId: ref, projectPath: task.projectRoot, sessionAnchor: task.branchAnchor ?? task.sessionId, taskId: task.taskId, workflowRevision: task.revision, timestamp: new Date().toISOString(), eventType, evidenceRefs: [ref] }); } catch {}
+  }
   let currentCtx;
   let enabled = true;
   let forcedNextRoute;
@@ -58,7 +78,7 @@ export default function automaticWorkflows(pi) {
   const binding = ctx => ({ sessionId: sessionId(ctx), projectRoot: path.resolve(ctx.cwd), branchIds: ctx.sessionManager.getBranch().map(e => e.id) });
   const scheduler = createWaitScheduler({ tick: () => {
     const ctx = currentCtx;
-    if (!ctx || !enabled || optedOut(ctx.cwd)) return;
+    if (!ctx || !enabled || optedOut(ctx.cwd) || !owner() || task?.continuationStopped) return;
     for (const job of task?.waits ?? []) {
       if (job.status !== 'scheduled') continue;
       if (!eligibleWait(task, job, binding(ctx))) { job.status = 'suspended'; append(pi, 'updated', task); continue; }
@@ -69,6 +89,7 @@ export default function automaticWorkflows(pi) {
       if (Date.now() < job.nextDue) continue;
       // Keep busy work in the controller queue, not in Pi's un-retractable message queue.
       if (!ctx.isIdle?.()) {
+        friction('overdue_check_running', [job.id, job.nextDue]);
         scheduler.arm(task.waits.map(j => ({ ...j, nextDue: Math.max(j.nextDue, Date.now() + 1000) })));
         return;
       }
@@ -89,12 +110,26 @@ export default function automaticWorkflows(pi) {
     const records = ctx.sessionManager.getBranch().filter((entry) => entry.type === "custom" && entry.customType === ENTRY_TYPE).map((entry) => entry.data);
     const settings = records.filter((entry) => entry?.schemaVersion === 1 && entry.action === "setting").at(-1);
     enabled = settings?.enabled ?? true;
+    ownershipRejected = false;
     task = reconstruct(ctx.sessionManager.getBranch());
+    if (!task) {
+      const transfer = ctx.sessionManager.getBranch().filter(e => e.type === 'custom' && e.customType === 'workflow:continuation-transfer').at(-1);
+      if (transfer) {
+        try {
+          const snapshot = transfer.data;
+          loadPinnedRevision({ revisionId: snapshot.task.revision, resourceRoot: snapshot.task.resourceRoot, packageRoot: root, storeRoot: revisionStore });
+          task = transfers.import(snapshot, { ...binding(ctx), branchAnchor: transfer.id });
+          persistEntry(pi, 'selected', task);
+        } catch { ownershipRejected = true; ctx.ui?.notify?.('Continuation transfer rejected; reconcile with owner.', 'warning'); }
+      }
+    }
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "custom" && entry.customType === "workflow:child-lifecycle") applyChildLifecycle(task, entry.data);
     }
     launchReservations = new Map();
+    if (!owner()) { scheduler.stop(); renderStatus(ctx); return; }
     for (const job of task?.waits ?? []) {
+      if (job.status === 'checking') job.reconciliationRequired = true;
       if (!['cancelled', 'expired'].includes(job.status) && (job.status === 'checking' || !eligibleWait(task, job, binding(ctx)))) job.status = 'suspended';
     }
     if (task?.waits?.length) append(pi, 'updated', task);
@@ -107,6 +142,15 @@ export default function automaticWorkflows(pi) {
     const status = !enabled ? "Conductor:off" : task ? `Conductor · ${WORKFLOWS[task.route].label} · ${task.externalState ?? task.stage}${task.waits?.some(j => j.status === 'scheduled') ? ' · next ' + new Date(Math.min(...task.waits.filter(j => j.status === 'scheduled').map(j => j.nextDue))).toISOString() : ''}` : "Conductor:auto";
     ctx.ui.setStatus("automatic-workflows", status);
   }
+
+  pi.events.on('workflow:continuation-export', request => {
+    if (!request || typeof request.respond !== 'function' || !currentCtx || !currentCtx.isIdle?.() || currentCtx.hasPendingMessages?.() || !enabled || !owner() || !task || task.stage === 'completed' || request.projectRoot !== task.projectRoot || task.childRuns.some(run => run.status === 'active')) return;
+    transfers.invalidate(task);
+    const snapshot = transfers.export(task);
+    task.outgoingTicket = snapshot.transferId;
+    persistEntry(pi, 'updated', task);
+    request.respond(snapshot);
+  });
 
   pi.on("session_start", async (_event, ctx) => {
     restore(ctx);
@@ -121,7 +165,11 @@ export default function automaticWorkflows(pi) {
 
   pi.on("before_agent_start", (event, ctx) => {
     currentCtx = ctx;
-    staleWakeup = false;
+    staleWakeup = !owner();
+    if (staleWakeup) {
+      event.systemPromptOptions.sections.automatic_workflow = 'Workflow ownership is not bound to this session. Stop and reconcile; never replay mutations.';
+      return;
+    }
     if (event.messageType === 'custom' && event.message?.customType === 'workflow-wakeup') {
       const job = task?.waits?.find(j => j.id === event.message.details?.jobId);
       let valid = enabled && !optedOut(ctx.cwd) && job?.status === 'checking' && !job.deliveredAt && eligibleWait(task, job, binding(ctx));
@@ -137,6 +185,7 @@ export default function automaticWorkflows(pi) {
       if (!valid) event.systemPromptOptions.sections.automatic_workflow = 'Stale Conductor wakeup: take no action. Report reconciliation required and stop.';
       return;
     }
+    if (event.messageType === 'user' && task) append(pi, 'updated', task);
     if (event.messageType === 'user' && task?.waits?.some(j => j.status === 'scheduled')) {
       for (const job of task.waits) if (job.status === 'scheduled') job.status = 'suspended';
       append(pi, 'updated', task);
@@ -163,7 +212,7 @@ export default function automaticWorkflows(pi) {
     return { message: { customType: "workflow-routing", content: "AUTOMATIC WORKFLOW ROUTING: Before answering this substantive engineering request, call workflow_select unless a matching active task is already in progress. If task intent or scope changed, select a new route. Preserve all explicit user constraints. A Plan route must stop before implementation. A Review or Investigation route is read-only.", display: false, details: { projectRoot: path.resolve(ctx.cwd) } } };
   });
 
-  pi.registerTool({
+  registerTool({
     name: "workflow_select",
     label: "Select workflow",
     description: "Select and load a trusted engineering playbook before substantive work. Routes include architect, bug-fix, feature, refactor, investigation, review, plan, performance, hillclimb, runtime-forensics, trace-forensics, prototype, visual-parity, skill-authoring, eval, session-pickup, pause-safely, multi-phase-plan, worktree-cleanup, babysit, shipping, opening-a-pr, autonomous-run, orchestrate, autopilot-stack, autopilot-full, and lightweight. Select architect before substantive feature implementation or when a change crosses a function boundary.",
@@ -182,6 +231,11 @@ export default function automaticWorkflows(pi) {
         const activeRevision = task && task.projectRoot === path.resolve(ctx.cwd) && task.stage !== "completed" && task.resourceRoot
           ? loadPinnedRevision({ revisionId: task.revision, resourceRoot: task.resourceRoot, packageRoot: root, storeRoot: revisionStore })
           : loadActiveRevision({ packageRoot: root, storeRoot: revisionStore });
+        if (equivalentSelection(task, { ...args, route }, binding(ctx))) {
+          friction('redundant_route', task.stage);
+          routingNeeded = false;
+          return { content: text(`${promptFor(route, task)}\n\n${loadRoute(route, activeRevision.resourceRoot)}`), details: { taskId: task.taskId, route, revision: task.revision } };
+        }
         if (task?.childRuns.some((run) => run.status === "active")) throw new Error("Owned children remain active; reconcile them before changing workflow scope.");
         const continuing = task && task.projectRoot === path.resolve(ctx.cwd) && task.stage !== "completed";
         const newTask = makeTask({ taskId: continuing ? task.taskId : crypto.randomUUID(), projectRoot: path.resolve(ctx.cwd), sessionId: sessionId(ctx), branchAnchor: branchId(ctx), route, scope: args.scope, constraints: args.constraints, reason: args.reason, revision: activeRevision.revisionId });
@@ -191,7 +245,7 @@ export default function automaticWorkflows(pi) {
           newTask.childRuns = task.childRuns;
           newTask.isolations = task.isolations ?? [];
           if (task.launchAllowance) newTask.launchAllowance = structuredClone(task.launchAllowance);
-          for (const field of ['externalState', 'latestResponseRef', 'waits']) {
+          for (const field of ['externalState', 'latestResponseRef', 'waits', 'continuationFailures', 'continuationStopped', 'incomingTicket', 'continuationGeneration']) {
             if (task[field] !== undefined) newTask[field] = structuredClone(task[field]);
           }
         }
@@ -209,15 +263,16 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: 'workflow_wait', label: 'Conductor wait',
-    description: 'Schedule/list/cancel authorized external checks, record outcome, or request owner approval to continue. Never retry ambiguous mutations. Approval-needed stops all checks. Times are epoch milliseconds.',
+    description: 'Schedule/list/cancel authorized external checks, record outcome, or request owner approval to continue. Never retry ambiguous mutations. Approval-needed stops all checks. reconcile resumes a suspended read-only check after recording responseRef and nextDue, retaining its original budget. Times are epoch milliseconds.',
     parameters: Type.Object({ action: Type.String(), id: Type.Optional(Type.String()), check: Type.Optional(Type.String()), authorization: Type.Optional(Type.String()), responseRef: Type.Optional(Type.String()), state: Type.Optional(Type.String()), nextDue: Type.Optional(Type.Integer()), deadline: Type.Optional(Type.Integer()), maxAttempts: Type.Optional(Type.Integer()) }),
     async execute(_id, args, _signal, _update, ctx) {
       if (process.env.PI_SUBAGENT_CHILD === '1' || process.env.PI_SUBAGENT_ID) throw new Error('Only controllers own waits.');
       if (!enabled || optedOut(ctx.cwd) || !task || task.projectRoot !== path.resolve(ctx.cwd) || task.sessionId !== sessionId(ctx)) throw new Error('No matching enabled task.');
       if (args.action === 'list') return { content: text(JSON.stringify(task.waits ?? [])), details: task.waits ?? [] };
       if (args.action === 'schedule') scheduleWait(task, { id: crypto.randomUUID(), check: args.check, authorization: args.authorization, responseRef: args.responseRef, nextDue: args.nextDue, deadline: args.deadline, maxAttempts: args.maxAttempts }, { sessionId: sessionId(ctx), projectRoot: path.resolve(ctx.cwd), branchAnchor: branchId(ctx) }, Date.now());
+      else if (args.action === 'reconcile') reconcileWait(task, args, Date.now());
       else if (args.action === 'cancel') {
         const job = task.waits?.find(j => j.id === args.id);
         if (!job) throw new Error('Unknown job.');
@@ -233,7 +288,7 @@ export default function automaticWorkflows(pi) {
         if (!enabled || optedOut(ctx.cwd) || task !== target || sessionId(ctx) !== task.sessionId || task.externalState !== 'approval-needed') throw new Error('Stale approval.');
         task.externalState = 'working';
         for (const job of task.waits ?? []) if (job.status === 'approval-needed') job.status = 'cancelled';
-      } else throw new Error('Use schedule, list, cancel, outcome or approve.');
+      } else throw new Error('Use schedule, list, cancel, outcome, reconcile or approve.');
       append(pi, 'updated', task);
       scheduler.arm(task.waits ?? []);
       renderStatus(ctx);
@@ -249,6 +304,16 @@ export default function automaticWorkflows(pi) {
   function baseModel(model) {
     return typeof model === 'string' ? model.replace(/:(off|minimal|low|medium|high|xhigh|max)$/, '') : undefined;
   }
+  // A model pinned in the agent profile frontmatter is owner-authored config, so it counts as approved.
+  function profileModel(agent) {
+    if (!agent) return;
+    const agentDir = process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), '.pi', 'agent');
+    for (const dir of [path.join(process.cwd(), '.pi', 'agents'), path.join(agentDir, 'agents')]) {
+      const file = path.join(dir, `${agent}.md`);
+      if (!fs.existsSync(file)) continue;
+      return fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/)?.[1].match(/^model:\s*(\S+)/m)?.[1];
+    }
+  }
   function authorizeModel(input, parentModel, previous, effectiveModel) {
     if (!parentModel) return 'Parent model identity is unavailable.';
     const selector = childSelector(input, previous);
@@ -257,7 +322,7 @@ export default function automaticWorkflows(pi) {
     if (effectiveModel !== undefined && !allowed(effectiveModel)) return 'Resolved child model requires an explicitly approved role/model map.';
   }
 
-  pi.registerTool({
+  registerTool({
     name: 'workflow_approve_child_models',
     label: 'Approve task child role/model mapping',
     description: 'Ask the interactive owner to replace the active task child model mapping (at most 16 exact entries). Role selects agent when present, otherwise name (workflow step key). Never approves by model text alone or starts agents. Other authorization and spending constraints remain.',
@@ -287,16 +352,19 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: 'workflow_request_budget',
     label: 'Request owner-approved launch allowance',
-    description: 'Ask the interactive owner to authorize exactly the next N child launches for the active task. Never starts agents. Four-active/no-nesting restrictions remain. Do not retry a denied request without a new owner instruction.',
+    description: 'Use the existing allowance of 16 total child launches per task without prompting. Ask the interactive owner only when the requested next N launches exceed the remaining allowance. Never starts agents. Four-active/no-nesting restrictions remain. Do not retry a denied request without a new owner instruction.',
     parameters: Type.Object({ launches: Type.Integer({ minimum: 1 }), reason: Type.String() }),
     async execute(_id, args, _signal, _update, ctx) {
       try {
         if (process.env.PI_SUBAGENT_CHILD === '1' || process.env.PI_SUBAGENT_ID) throw new Error('Children cannot request delegation budget.');
         if (!task || task.projectRoot !== path.resolve(ctx.cwd)) throw new Error('Select the matching workflow task first.');
         if (!Number.isSafeInteger(args.launches) || args.launches < 1 || !Number.isSafeInteger(task.childRuns.length + args.launches) || typeof args.reason !== 'string' || !args.reason.trim() || args.reason.length > 500) throw new Error('Provide a positive safe-integer allowance and a bounded reason.');
+        const limit = totalChildLimit(task), remaining = limit - task.childRuns.length;
+        if (limit <= 0) throw new Error('Invalid launch allowance; reconcile with the owner.');
+        if (args.launches <= remaining) return { content: text(`Existing allowance covers these launches; ${remaining} remain of ${limit} total. No approval needed and no agents were started.`), details: { approvalRequired: false, totalLimit: limit, remaining } };
         if (!ctx.hasUI || typeof ctx.ui?.confirm !== 'function') throw new Error('Budget changes require interactive owner confirmation; no allowance was granted.');
         const target = task, count = task.childRuns.length;
         const approved = await ctx.ui.confirm('Authorize child launches', `Allow exactly the next ${args.launches} child launches for task ${task.taskId}?\nScope: ${task.scope}\nReason: ${args.reason}\nRecorded launches: ${count}; new recorded total limit: ${count + args.launches}.\nAt most ${MAX_ACTIVE_CHILDREN} active children, no nesting, and existing model/isolation/authorization restrictions still apply. No agents start from this approval.`);
@@ -304,22 +372,12 @@ export default function automaticWorkflows(pi) {
         if (task !== target || task.childRuns.length !== count) throw new Error('Task or launch count changed while approval was pending; request a fresh confirmation.');
         const allowance = approveChildAllowance(task, args.launches);
         append(pi, 'updated', task);
-  // A model pinned in the agent profile frontmatter is owner-authored config, so it counts as approved.
-  function profileModel(agent) {
-    if (!agent) return;
-    const agentDir = process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), '.pi', 'agent');
-    for (const dir of [path.join(process.cwd(), '.pi', 'agents'), path.join(agentDir, 'agents')]) {
-      const file = path.join(dir, `${agent}.md`);
-      if (!fs.existsSync(file)) continue;
-      return fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/)?.[1].match(/^model:\s*(\S+)/m)?.[1];
-    }
-  }
         return { content: text(`Owner approved exactly the next ${args.launches} launches. Recorded total limit: ${allowance.totalLimit}; active limit remains ${MAX_ACTIVE_CHILDREN}. No agents were started.`), details: allowance };
       } catch (error) { return { content: text(String(error)), isError: true }; }
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: "workflow_prepare_child",
     label: "Prepare isolated child directory",
     description: "Prepare a task-owned isolated working directory for a writing child. Launch Herdr with the returned cwd. Retain it for review; never automatically delete it.",
@@ -340,7 +398,7 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: "workflow_resource",
     label: "Load pinned workflow resource",
     description: "Recover the active task's selected workflow or a principle from its pinned revision after resume or compaction.",
@@ -356,7 +414,7 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: "workflow_update",
     label: "Record workflow evidence",
     description: "Record a workflow stage, verification outcome, or user correction as compact durable evidence.",
@@ -373,8 +431,26 @@ export default function automaticWorkflows(pi) {
       try {
         if (!task || (args.taskId && task.taskId !== args.taskId)) throw new Error("No matching active task.");
         if (args.action === "verification" && !["passed", "failed", "skipped", "unavailable", "inconclusive"].includes(args.result)) throw new Error("Verification result must be passed, failed, skipped, unavailable, or inconclusive.");
+        if (args.action === 'stage' && /completed|cleanup/i.test(args.value ?? '')) {
+          if (task.childRuns.some(r => r.status === 'active' || r.lifecycleStatus === 'unresolved')) {
+            friction('unresolved_child', task.childRuns.filter(r => r.status === 'active' || r.lifecycleStatus === 'unresolved').map(r => r.childId));
+            throw new Error('Owned children remain unresolved; join before completion.');
+          }
+          try { completionGate(task); }
+          catch (error) { friction('missing_evidence', task.latestResponseRef ?? 'external'); throw error; }
+        }
+        const stopped = task.continuationStopped;
         applyUpdate(task, args);
+        if (args.action === 'verification' && ['failed', 'inconclusive', 'unavailable'].includes(args.result)) {
+          const key = args.check.trim().replace(/\s+/g, ' ').toLowerCase();
+          const count = task.continuationFailures?.[`${key}:${args.result}`];
+          if (count > 1) friction('equivalent_failure', [key, args.result, count]);
+        }
         append(pi, "updated", task);
+        if (!stopped && task.continuationStopped) {
+          ctx.ui?.notify?.('Continuation stopped after three equivalent failures; read-only reconciliation required.', 'warning');
+          pi.events.emit('workflow:continuation-state', { schemaVersion: 1, state: 'suspended', reason: 'equivalent-failure-budget', count: 3 });
+        }
         scheduler.arm(task.waits ?? []);
         renderStatus(ctx);
         return { content: text(`Recorded ${args.action} for ${task.route}.`), details: { taskId: task.taskId, stage: task.stage } };
@@ -395,7 +471,7 @@ export default function automaticWorkflows(pi) {
     }
   });
 
-  pi.registerTool({
+  registerTool({
     name: 'workflow_candidate_context',
     label: 'Inspect candidate evaluation requirements',
     description: 'Read the approved inactive candidate digest, baseline revision and behavioral scenario checklist. Does not run tests or authorize more agents.',
@@ -410,7 +486,7 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: 'workflow_candidate_acceptance',
     label: 'Submit candidate behavioral evidence',
     description: 'Top-level coordinator only: submit actual behavioral scenario, independent review and paired pilot evidence. Does not run tests or activate a revision. Never submit synthetic evidence as real acceptance.',
@@ -427,7 +503,7 @@ export default function automaticWorkflows(pi) {
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: "workflow_candidate_complete",
     label: "Mark candidate build complete",
     description: "Explicitly finish an approved candidate build. Evaluation occurs only at final settlement with no active owned children.",
@@ -442,9 +518,10 @@ export default function automaticWorkflows(pi) {
   });
 
   pi.on("agent_settled", (event, ctx) => {
+    if (!owner()) return;
     const unresolved = task?.waits?.filter(j => j.status === 'checking') ?? [];
     if (unresolved.length) {
-      for (const job of unresolved) job.status = 'suspended';
+      for (const job of unresolved) { job.status = 'suspended'; job.reconciliationRequired = true; }
       append(pi, 'updated', task);
       ctx.ui?.notify?.('Conductor check outcome is ambiguous; reconcile before scheduling again.', 'warning');
       renderStatus(ctx);
@@ -478,7 +555,7 @@ export default function automaticWorkflows(pi) {
   });
 
   pi.on("agent_before_settle", (event, ctx) => {
-    if (event.outcome !== "completed" || event.continue || ctx.hasPendingMessages()) return;
+    if (!owner() || task?.continuationStopped || event.outcome !== "completed" || event.continue || ctx.hasPendingMessages()) return;
     if (routingNeeded && !routingReminderUsed) {
       routingReminderUsed = true;
       return { continue: true, entries: [{ type: "custom_message", customType: "workflow-routing-reminder", content: "This is a substantive engineering request and no matching workflow was selected. Your next action must be workflow_select. Choose the route that preserves the user's explicit constraints, then continue only within that scope.", display: true }] };
@@ -498,10 +575,17 @@ export default function automaticWorkflows(pi) {
   });
 
   pi.on("tool_call", (event, ctx) => {
-    if (staleWakeup) return { block: true, reason: 'Stale or duplicate Conductor wakeup; no tool actions authorized. Reconcile from a fresh owner request.' };
+    if (!owner() || staleWakeup) return { block: true, reason: 'Stale or duplicate Conductor wakeup; no tool actions authorized. Reconcile from a fresh owner request.' };
+    if ((task?.continuationStopped || task?.waits?.some(j => j.status === 'suspended' && j.reconciliationRequired)) && !['read', 'grep', 'find', 'ls', 'workflow_resource', 'workflow_update', 'workflow_wait'].includes(event.toolName) && pi.getAllTools?.().find(t => t.name === event.toolName)?.annotations?.readOnlyHint !== true) return { block: true, reason: 'Continuation suspended: read-only reconciliation only; never replay uncertain mutations.' };
     const fenced = writeFence.guard(event, ctx);
     if (fenced) return fenced;
-    if (!["subagent", "subagent_resume", "subagent_workflow"].includes(event.toolName)) return;
+    if (task) {
+      try { append(pi, 'updated', task); }
+      catch { return { block: true, reason: 'Continuation ownership changed; reconcile before taking action.' }; }
+    }
+    const nativeResume = event.toolName === 'subagent_native' && event.input?.action === 'resume';
+    if (!["subagent", "subagent_resume", "subagent_workflow"].includes(event.toolName) && !nativeResume) return;
+    if (nativeResume) event.input.sessionPath = event.input.id;
     if (event.toolName === "subagent_workflow" && ["list", "status", "cancel"].includes(event.input?.action)) return;
     if (event.toolName === "subagent" && event.input?.action) return;
     if (process.env.PI_SUBAGENT_CHILD === "1" || process.env.PI_SUBAGENT_ID) return { block: true, reason: "Nested subagent spawning is disabled for workflow child agents." };
@@ -512,9 +596,9 @@ export default function automaticWorkflows(pi) {
     if (event.toolName !== "subagent") {
       const parentModel = ctx.model && `${ctx.model.provider}/${ctx.model.id}`;
       if (!parentModel) return { block: true, reason: 'Parent model identity is unavailable.' };
-      if (event.toolName === 'subagent_resume') {
-        const previous = task.childRuns.findLast(run => run.sessionFile === event.input.sessionPath);
-        if (!previous || task.childRuns.some(run => run.sessionFile === event.input.sessionPath && run.status === 'active')) return { block: true, reason: 'Resume requires an owned terminal session with no unresolved or active run.' };
+      if (event.toolName === 'subagent_resume' || nativeResume) {
+        const previous = task.childRuns.findLast(run => run.backend === 'background' ? run.runtimeId === event.input.sessionPath : run.sessionFile === event.input.sessionPath);
+        if (!previous || task.childRuns.some(run => (run.backend === 'background' ? run.runtimeId === event.input.sessionPath || run.resumedFrom === previous?.childId : run.sessionFile === event.input.sessionPath) && run.status === 'active')) return { block: true, reason: 'Resume requires an owned terminal session with no unresolved or active run.' };
         if (task.childRuns.length >= totalChildLimit(task)) return { block: true, reason: 'Total child limit reached; approval is required.' };
         if (task.childRuns.filter(run => run.status === 'active').length >= MAX_ACTIVE_CHILDREN) return { block: true, reason: 'Active child limit reached.' };
         const modelError = authorizeModel(event.input, parentModel, previous);
@@ -577,16 +661,21 @@ export default function automaticWorkflows(pi) {
     request.handled = true;
     const deny = reason => { request.allowed = false; request.reason = reason; };
     if (process.env.PI_SUBAGENT_CHILD === '1' || process.env.PI_SUBAGENT_ID) return deny('Nested child launches are disabled.');
+    if (!owner() || task?.continuationStopped) return deny('Continuation is suspended; owner reconciliation required.');
     if (!task || path.resolve(request.parentCwd ?? '') !== task.projectRoot) return deny('No matching parent workflow task.');
-    if (!['spawn','resume'].includes(request.kind) || !request.id || !request.sessionFile || !request.input) return deny('Malformed native admission request.');
+    const background = request.executionMode === 'background' && request.backendProtocol === 1;
+    if (!['spawn','resume'].includes(request.kind) || !request.id || (!background && !request.sessionFile) || !request.input) return deny('Malformed native admission request.');
     if (request.input._workflowTaskId !== task.taskId) return deny('Launch belongs to a stale or unapproved workflow task.');
     if (task.childRuns.some(run => run.runtimeId === request.id)) return deny('Duplicate runtime launch identity.');
-    const previous = request.kind === 'resume' ? task.childRuns.findLast(run => run.sessionFile === request.sessionFile) : undefined;
-    if (request.kind === 'resume' && (!previous || task.childRuns.some(run => run.sessionFile === request.sessionFile && run.status === 'active'))) return deny('Resume requires an owned terminal session.');
+    const matches = run => background ? run.backend === 'background' && run.runtimeId === request.previousId : run.backend !== 'background' && run.sessionFile === request.sessionFile;
+    const previous = request.kind === 'resume' ? task.childRuns.findLast(matches) : undefined;
+    if (request.kind === 'resume' && (!previous || task.childRuns.some(run => (matches(run) || (background && run.resumedFrom === previous?.childId)) && run.status === 'active'))) return deny('Resume requires an owned terminal session.');
     if (!request.model) return deny('Resolved child model is unavailable.');
+    if (background && !/^[^/\s]+\/[^\s]+$/.test(request.model)) return deny('Background requires an exact provider/model selector.');
     const modelError = authorizeModel(request.input, request.parentModel, previous, request.model);
     if (modelError) return deny(modelError);
     if (previous && previous.requestedCwd !== request.cwd) return deny('Saved resume directory differs from its owned directory.');
+    if (background && previous && previous.resolvedModel !== request.model) return deny('Saved resume model differs from its owned model.');
     const ids = launchReservations.get(request.toolCallId) ?? [];
     let run = task.childRuns.find(item => ids.includes(item.childId) && item.status === 'active' && !item.runtimeId);
     const checked = inspectChild({ ...request.input, cwd: request.cwd }, request.parentModel, previous, run?.childId);
@@ -600,10 +689,29 @@ export default function automaticWorkflows(pi) {
     run.modelSelector = childSelector(request.input, previous);
     run.runtimeId = request.id;
     run.sessionFile = request.sessionFile;
+    run.backend = background ? 'background' : 'pane';
+    if (background) { run.reservationId = request.id; run.resolvedModel = request.model; }
     run.requestedCwd = request.cwd;
     if (request.kind === 'resume') run.resumedFrom = previous.childId;
     append(pi, 'updated', task);
     request.allowed = true;
+    if (background) request.backendProtocolAccepted = 1;
+  });
+
+  pi.events.on('workflow:child-backend-binding', event => {
+    if (!owner() || !task || event?.version !== 1 || event.executionMode !== 'background' || !event.id) return;
+    const run = task.childRuns.find(run => run.backend === 'background' && run.reservationId === event.reservationId && run.runtimeId === event.reservationId);
+    if (!run || task.childRuns.some(other => other !== run && other.runtimeId === event.id)) return;
+    run.runtimeId = event.id;
+    run.sessionRoot = event.sessionRoot;
+    append(pi, 'updated', task);
+    if (run.needsAttention) queueMicrotask(() => { if (owner()) pi.events.emit('workflow:child-interrupt-request', { version: 1, id: run.runtimeId }); });
+  });
+
+  pi.events.on('workflow:child-backend-validation-failed', event => {
+    if (!owner() || event?.version !== 1) return;
+    const run = task?.childRuns.find(run => run.backend === 'background' && run.reservationId === event.reservationId && run.runtimeId === event.reservationId);
+    if (run) { run.status = 'completed'; run.lifecycleStatus = 'failed'; append(pi, 'updated', task); }
   });
 
   const interruptOwned = () => {
@@ -627,6 +735,27 @@ export default function automaticWorkflows(pi) {
   });
 
   pi.on("tool_result", (event) => {
+    if (!owner()) return;
+    if (task && !event.toolName.startsWith('workflow_')) {
+      const canonical = (value, top = false) => Array.isArray(value) ? value.map(v => canonical(v)) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().filter(k => !top || !['model', 'thinking', 'reason'].includes(k)).map(k => [k, canonical(value[k])])) : value;
+      const identity = JSON.stringify(canonical(event.input ?? {}, true));
+      // Different failure causes must not consume one equivalence budget. Unknown
+      // failures use an exact local digest, never observer-visible error prose.
+      const cause = event.details?.failureClass ?? event.details?.code ?? (event.isError ? crypto.createHash('sha256').update(JSON.stringify(event.content ?? [])).digest('hex') : '');
+      const operation = `tool:${event.toolName}:${crypto.createHash('sha256').update(identity).digest('hex')}`;
+      const check = `${operation}:${cause}`;
+      if (event.isError || Object.keys(task.continuationFailures ?? {}).some(k => k.startsWith(`${operation}:`))) {
+        const stopped = task.continuationStopped;
+        applyUpdate(task, { action: 'verification', check: event.isError ? check : operation, result: event.isError ? 'failed' : 'passed' });
+        const count = task.continuationFailures?.[`${check}:failed`];
+        if (event.isError && count > 1) friction('equivalent_failure', [check, count]);
+        append(pi, 'updated', task);
+        if (!stopped && task.continuationStopped) {
+          scheduler.stop();
+          pi.events.emit('workflow:continuation-state', { schemaVersion: 1, state: 'suspended', reason: 'equivalent-failure-budget', count: 3 });
+        }
+      }
+    }
     if (event.toolName !== "subagent" || !task) return;
     const reservationIds = launchReservations.get(event.toolCallId) ?? [];
     if (event.details?.status === "started" && event.details?.id) {

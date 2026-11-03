@@ -25,6 +25,7 @@
 // pi-extension/subagents/{index.ts,cmux.ts} @ fix/launch-verify-retry.
 import { accessSync, constants, existsSync, statSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
+import { checkPreflight, type Preflight } from './preflight.ts';
 import { dirname, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +41,7 @@ import {
 
 /** `subagent` tool params consulted by launch planning. */
 export interface SubagentLaunchParams {
+  preflight?: Preflight;
   name: string;
   task: string;
   agent?: string;
@@ -394,6 +396,7 @@ export function buildLaunchPlan(
     agentDefs,
   );
   const targetCwd = effectiveCwd ?? ctx.parentCwd;
+  checkPreflight(params.preflight, targetCwd, env);
   const reporterExtension = resolveReporterExtension(env, effectiveAgentDir);
   const childSessionDir = getDefaultSessionDirFor(targetCwd, effectiveAgentDir);
 
@@ -568,6 +571,7 @@ export function buildLaunchPlan(
 // ── resume launches ─────────────────────────────────────────────────────────
 
 export interface ResumeLaunchParams {
+  preflight?: Preflight;
   sessionPath: string;
   name?: string;
   message?: string;
@@ -628,6 +632,7 @@ export function buildResumeLaunchPlan(
   const now = ctx.now ?? new Date();
   const id = ctx.id ?? Math.random().toString(16).slice(2, 10);
   const policy = loadLaunchPolicy(params.sessionPath);
+  checkPreflight(params.preflight, policy.cwd, env);
   const displayName = params.name ?? "Resume";
   const { autoExit, interactive } = resolveResumeLaunchBehavior(params);
 

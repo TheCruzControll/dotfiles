@@ -248,10 +248,17 @@ export default function (pi: ExtensionAPI) {
     signalStartup("executing");
   });
 
-  pi.on("agent_end", (event, ctx) => {
-    const messages = (event as any).messages as any[] | undefined;
+  let lastRunMessages: any[] | undefined;
+  pi.on("agent_end", (event) => {
+    lastRunMessages = (event as any).messages;
+  });
+
+  // agent_end may precede queued work/retries; only settled proves final idle.
+  pi.on("agent_settled", (event, ctx) => {
+    const messages = lastRunMessages;
+    lastRunMessages = undefined;
     const shouldExit =
-      autoExit &&
+      autoExit && !event.aborted && messages !== undefined &&
       shouldAutoExitOnAgentEnd(userTookOver, messages, getActiveSubagentCount());
 
     if (shouldExit) {

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import herdrSubagents, { __test__ } from "../index.ts";
+__test__.setBackgroundInitializer(() => {}); // Isolate pane lifecycle from upstream in legacy registration tests.
 import { getActiveSubagentCount } from "../src/runtime-state.ts";
 import type { SubagentOutcome } from "../src/watcher.ts";
 
@@ -74,6 +75,10 @@ function createFakePi(opts?: { allTools?: FakeToolInfo[] }) {
       emit(type: string, data: unknown) { for (const fn of eventHandlers.get(type) ?? []) fn(data); },
     },
     registerTool(tool: any) {
+      if (tool.name === 'subagent') {
+        const execute = tool.execute;
+        tool = { ...tool, execute: (id: any, args: any, ...rest: any[]) => execute(id, { executionMode: 'pane', ...args }, ...rest) };
+      }
       registeredTools.push(tool);
     },
     registerCommand(name: string, options: any) {
@@ -226,10 +231,10 @@ function makeSpawnFixture() {
 // ── activation guard ───────────────────────────────────────────────────────
 
 describe("index: activation guard", () => {
-  it("not inside herdr → no tools registered at load", () => {
+  it('outside herdr registers background-capable hybrid tools', () => {
     const fake = createFakePi();
     herdrSubagents(fake.api);
-    assert.deepEqual(fake.toolNames(), []);
+    assert.ok(fake.toolNames().includes('subagent'));
   });
 
   it("inside herdr → subagent tool registered at load", () => {
@@ -239,22 +244,22 @@ describe("index: activation guard", () => {
     assert.ok(fake.toolNames().includes("subagent"));
   });
 
-  it("outside herdr: session_start registers setup-hint stubs when no subagent tool exists", async () => {
+  it("outside herdr: explicit Pane launch returns setup guidance", async () => {
     const fake = createFakePi({ allTools: [] });
     herdrSubagents(fake.api);
-    assert.deepEqual(fake.toolNames(), []);
+    assert.ok(fake.toolNames().includes('subagent'));
 
     const { ctx } = makeFakeCtx();
     fake.fire("session_start", {}, ctx);
 
     const stub = fake.findTool("subagent");
-    assert.ok(stub, "expected a subagent setup-hint stub");
+    assert.ok(stub, "expected Hybrid subagent tool");
     const result = await stub.execute("t1", { name: "X", task: "y" }, undefined, undefined, ctx);
     assert.match(result.content[0].text, /herdr/i);
-    assert.equal(result.details.error, "not in herdr");
+    assert.equal(result.details.error, 'herdr setup incomplete');
   });
 
-  it("outside herdr: stays silent when another extension already provides subagent", () => {
+  it("outside herdr: retains the public Hybrid surface without startup notifications", () => {
     const fake = createFakePi({
       allTools: [{ name: "subagent", sourceInfo: { path: "/other/pi-interactive-subagents/index.ts" } }],
     });
@@ -262,7 +267,7 @@ describe("index: activation guard", () => {
     const { ctx, notifications } = makeFakeCtx();
     fake.fire("session_start", {}, ctx);
 
-    assert.deepEqual(fake.toolNames(), []);
+    assert.ok(fake.toolNames().includes('subagent'));
     assert.deepEqual(notifications, []);
   });
 

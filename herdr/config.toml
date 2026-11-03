@@ -7,7 +7,7 @@ delivery = "herdr"
 enabled = true
 
 [ui]
-status_indicators = "dots"
+status_indicators = "symbols"
 mouse_capture = true
 
 [theme]

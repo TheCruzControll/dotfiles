@@ -32,20 +32,56 @@ async function fixture(run){
   }
 }
 
+test('within-budget requests never prompt or shrink the 16-launch allowance',async()=>fixture(async f=>{
+  let prompts=0;
+  f.ctx.ui.confirm=async()=>{prompts++;return true;};
+  for(const launches of [1,8,16]) {
+    const result=await f.execute('workflow_request_budget',{launches,reason:'Use existing allowance'});
+    assert.equal(result.isError,undefined);
+    assert.deepEqual(result.details,{approvalRequired:false,totalLimit:16,remaining:16});
+    assert.equal(f.state().launchAllowance,undefined);
+  }
+  assert.equal(prompts,0);
+  f.ctx.hasUI=false;
+  assert.equal((await f.execute('workflow_request_budget',{launches:1,reason:'No prompt needed'})).details.approvalRequired,false);
+  const resource=await f.execute('workflow_resource');
+  assert.match(resource.content[0].text,/16 total launches/);
+  assert.doesNotMatch(resource.content[0].text,/eight total launches/);
+}));
+
+test('the sixteenth launch fits and the seventeenth needs approval',async()=>fixture(async f=>{
+  const restoreCount=count=>{
+    const task=structuredClone(f.state());
+    task.childRuns=Array.from({length:count},(_,i)=>({childId:`fixture-${i}`,status:'completed',isolated:true}));
+    f.entries.push({type:'custom',customType:'automatic-workflows',data:{schemaVersion:1,action:'updated',task}});
+    f.hooks.get('session_tree')({},f.ctx);
+  };
+  let prompts=0;
+  f.ctx.ui.confirm=async()=>{prompts++;return true;};
+  restoreCount(15);
+  assert.equal((await f.execute('workflow_request_budget',{launches:1,reason:'Sixteenth'})).details.approvalRequired,false);
+  assert.equal(prompts,0);
+  restoreCount(16);
+  const result=await f.execute('workflow_request_budget',{launches:1,reason:'Seventeenth'});
+  assert.equal(prompts,1);
+  assert.equal(result.details.totalLimit,17);
+  assert.equal(f.state().childRuns.length,16,'approval never launches children');
+}));
+
 test('launch allowance requires owner confirmation and survives route phases and reload',async()=>fixture(async f=>{
   let prompts=0;
-  f.ctx.ui.confirm=async(_title,message)=>{prompts++;assert.match(message,/exactly the next 12/);return false;};
-  assert.equal((await f.execute('workflow_request_budget',{launches:12,reason:'Finish bounded live checks'})).details.approved,false);
+  f.ctx.ui.confirm=async(_title,message)=>{prompts++;assert.match(message,/exactly the next 20/);return false;};
+  assert.equal((await f.execute('workflow_request_budget',{launches:20,reason:'Finish bounded live checks'})).details.approved,false);
   assert.equal(f.state().launchAllowance,undefined);
   f.ctx.hasUI=false;
-  assert.equal((await f.execute('workflow_request_budget',{launches:12,reason:'No UI'})).isError,true);
+  assert.equal((await f.execute('workflow_request_budget',{launches:20,reason:'No UI'})).isError,true);
   assert.equal(prompts,1);
   f.ctx.hasUI=true;f.ctx.ui.confirm=async()=>true;
   process.env.PI_SUBAGENT_ID='fixture-child';
-  assert.equal((await f.execute('workflow_request_budget',{launches:12,reason:'Child request'})).isError,true);
+  assert.equal((await f.execute('workflow_request_budget',{launches:20,reason:'Child request'})).isError,true);
   delete process.env.PI_SUBAGENT_ID;
-  const result=await f.execute('workflow_request_budget',{launches:12,reason:'Finish bounded live checks'});
-  assert.equal(result.details.totalLimit,12);
+  const result=await f.execute('workflow_request_budget',{launches:20,reason:'Finish bounded live checks'});
+  assert.equal(result.details.totalLimit,20);
   assert.equal(f.state().childRuns.length,0,'approval never starts an agent');
   const allowance=structuredClone(f.state().launchAllowance);
   await f.execute('workflow_select',{route:'review',scope:'Review fixture',reason:'next phase'});
@@ -58,7 +94,7 @@ test('launch allowance requires owner confirmation and survives route phases and
 test('changed task while owner approval is pending rejects the stale confirmation',async()=>fixture(async f=>{
   let resolve;
   f.ctx.ui.confirm=()=>new Promise(yes=>{resolve=yes;});
-  const waiting=f.execute('workflow_request_budget',{launches:12,reason:'Fixture pending approval'});
+  const waiting=f.execute('workflow_request_budget',{launches:20,reason:'Fixture pending approval'});
   await f.execute('workflow_select',{route:'plan',scope:'Changed phase',reason:'scope changed'});
   resolve(true);
   assert.equal((await waiting).isError,true);
@@ -68,7 +104,7 @@ test('changed task while owner approval is pending rejects the stale confirmatio
 test('changed launch count while owner approval is pending rejects the stale confirmation',async()=>fixture(async f=>{
   let resolve;
   f.ctx.ui.confirm=()=>new Promise(yes=>{resolve=yes;});
-  const waiting=f.execute('workflow_request_budget',{launches:12,reason:'Fixture pending approval'});
+  const waiting=f.execute('workflow_request_budget',{launches:20,reason:'Fixture pending approval'});
   f.bus.set('workflow:child-admission-probe',r=>{r.supported=true;});
   f.hooks.get('tool_call')({toolName:'subagent',toolCallId:'fixture',input:{name:'scout',task:'Read-only fixture'}},f.ctx);
   resolve(true);

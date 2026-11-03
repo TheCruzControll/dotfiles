@@ -25,6 +25,9 @@ test('bounded persisted wait and completion gates distinguish submission from ac
  // Approval is adapter-owned UI confirmation, never inferred from an external reply.
  task.externalState='working'; job.status='cancelled';
  externalOutcome(task,{state:'accepted',responseRef:'review:accepted'},4000);
+ job.status='scheduled';
+ for (const value of ['completed','cleanup']) assert.throws(()=>applyUpdate(task,{action:'stage',value}),/outstanding checks/);
+ job.status='cancelled';
  applyUpdate(task,{action:'stage',value:'completed'});
  assert.equal(job.status,'cancelled');
 });

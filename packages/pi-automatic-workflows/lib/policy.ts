@@ -5,7 +5,7 @@ export const ENTRY_TYPE = "automatic-workflows";
 export const ROUTE_EVENT = "workflow:evidence";
 export const REVISION = "0.1.0";
 export const MAX_ACTIVE_CHILDREN = 4;
-export const MAX_TOTAL_CHILDREN = 8;
+export const MAX_TOTAL_CHILDREN = 16;
 
 export function makeTask({ taskId, projectRoot, sessionId, branchAnchor, route, scope, constraints = [], reason, revision = REVISION }) {
   if (!WORKFLOWS[route]) throw new Error(`Unknown workflow route: ${route}`);
@@ -46,6 +46,19 @@ export function applyUpdate(task, update) {
   }
   else if (update.action === "verification") {
     if (!update.check || !update.result) throw new Error("Verification updates require check and result.");
+    const key = update.check.trim().replace(/\s+/g, ' ').toLowerCase();
+    task.continuationFailures ??= {};
+    if (['failed', 'inconclusive', 'unavailable'].includes(update.result)) {
+      const failureKey = `${key}:${update.result}`;
+      task.continuationFailures[failureKey] = (task.continuationFailures[failureKey] ?? 0) + 1;
+      if (task.continuationFailures[failureKey] >= 3) {
+        task.continuationStopped = true;
+        for (const job of task.waits ?? []) if (job.status === 'scheduled') job.status = 'suspended';
+      }
+    } else if (update.result === 'passed') {
+      for (const failureKey of Object.keys(task.continuationFailures)) if (failureKey.startsWith(`${key}:`)) delete task.continuationFailures[failureKey];
+      task.continuationStopped = Object.values(task.continuationFailures).some(count => count >= 3);
+    }
     task.verification.push({ check: update.check.slice(0, 300), result: update.result, paths: (update.paths ?? []).slice(0, 30), at: new Date().toISOString() });
     task.stage = "verify";
     task.lastEventType = update.result === "skipped" || update.result === "unavailable" ? "verification_invalidated" : "verification";
@@ -82,7 +95,7 @@ export function totalChildLimit(task) {
     && Number.isSafeInteger(allowance.nextLaunches) && allowance.nextLaunches > 0
     && Number.isSafeInteger(allowance.totalLimit) && allowance.totalLimit === allowance.launchCount + allowance.nextLaunches
     && Number.isFinite(Date.parse(allowance.approvedAt));
-  return valid ? allowance.totalLimit : 0;
+  return valid ? Math.max(MAX_TOTAL_CHILDREN, allowance.totalLimit) : 0;
 }
 
 /** Caller must obtain an interactive owner confirmation before granting this. */
@@ -130,6 +143,7 @@ export function recordChildComplete(task, payload) {
   const run = task.childRuns.find((item) => item.runtimeId === runtimeId);
   if (!run) return false;
   run.runtimeId ??= runtimeId;
+  if (run.backend === 'background') run.sessionFile = payload.sessionPath ?? payload.results?.find(result => result.sessionPath)?.sessionPath ?? run.sessionFile;
   run.status = "completed";
   return true;
 }

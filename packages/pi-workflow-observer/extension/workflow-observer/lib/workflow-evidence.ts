@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const WORKFLOW_EVIDENCE_SCHEMA_VERSION = 1;
+export const FRICTION_TYPES = Object.freeze([
+  "overdue_check_running", "equivalent_failure", "tool_validation_error",
+  "redundant_route", "unresolved_child", "transfer_conflict", "missing_evidence",
+]);
 const EVENT_TYPES = new Set([
+  ...FRICTION_TYPES,
   "route_selected",
   "route_changed",
   "stage",
@@ -77,8 +82,9 @@ export function normalizeWorkflowEvidence(record) {
   if (!Number.isFinite(parsedTimestamp.getTime()) || parsedTimestamp.toISOString() !== record.timestamp) {
     throw new TypeError("Invalid workflow evidence timestamp");
   }
-  if (!Array.isArray(record.evidenceRefs) || record.evidenceRefs.length > 16) {
-    throw new TypeError("Workflow evidence refs must be an array of at most 16 IDs");
+  if (!Array.isArray(record.evidenceRefs) || record.evidenceRefs.length > 16
+      || (FRICTION_TYPES.includes(record.eventType) && record.evidenceRefs.length === 0)) {
+    throw new TypeError("Workflow evidence refs must be an array of at most 16 IDs; friction requires a source ref");
   }
 
   return {
@@ -92,6 +98,18 @@ export function normalizeWorkflowEvidence(record) {
     eventType: record.eventType,
     evidenceRefs: [...new Set(record.evidenceRefs.map((ref) => boundedId(ref, "evidence reference")))],
   };
+}
+
+// Counts observed facts, not inferred waste or unknown wall-clock gaps.
+export function summarizeFriction(records) {
+  const counts = Object.fromEntries(FRICTION_TYPES.map((kind) => [kind, 0]));
+  const seen = new Set();
+  for (const record of records) {
+    if (!FRICTION_TYPES.includes(record.eventType) || seen.has(record.eventId)) continue;
+    seen.add(record.eventId);
+    counts[record.eventType] += 1;
+  }
+  return { advisory: true, counts };
 }
 
 export function registerWorkflowEvidenceListener(pi, store) {

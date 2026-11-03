@@ -19,13 +19,13 @@ function fixture(initial: any[] = []) {
   mode: "rpc", hasUI: true, signal: new AbortController().signal, cwd: "/fixture", model: {},
   ui: { notify: (s: string) => notices.push(s) },
   sessionManager: { getBranch: () => branch, getSessionFile: () => session, getSessionId: () => "fixture" },
-  getContextUsage: () => ({ percent: 45 }), isIdle: () => true,
+  getContextUsage: () => ({ percent: 70 }), isIdle: () => true,
   modelRegistry: { complete: async () => { calls++; duringGeneration?.(); return { content: [{ type: "text", text: '<file name="handoff.md">objective</file><file name="decisions.md">decisions</file><file name="failures.md">failures</file><file name="tasks.md">SKIP</file>' }] }; } },
   newSession: async (opts: any) => { switches++; await opts.setup({ appendCustomEntry() {} }); return { cancelled: false }; },
  };
  const pi: any = {
   on: (name: string, fn: Function) => hooks.set(name, fn),
-  events: { on: (name: string, fn: Function) => events.set(name, fn) },
+  events: { on: (name: string, fn: Function) => events.set(name, fn), emit() {} },
   appendEntry: (customType: string, data: unknown) => branch.push({ type: "custom", id: `entry-${++nextId}`, customType, data }),
   sendUserMessage: (s: string) => sent.push(s), registerCommand: (name: string, def: any) => commands.set(name, def),
  };
@@ -83,10 +83,66 @@ test("generation race discards preparation and defers replacement; terminal even
  assert.equal(f.calls, 2); assert.equal(f.switches, 1);
 });
 
+test("automatic handoff waits until 70% context usage", async () => {
+ const f = fixture();
+ f.ctx.getContextUsage = () => ({ percent: 69.9 });
+ await f.start(); await f.turn();
+ assert.equal(f.sent.length, 0);
+ f.ctx.getContextUsage = () => ({ percent: 70 });
+ await f.turn();
+ assert.equal(f.sent.length, 1);
+});
+
 test("no-child flow unchanged and threshold queue deduplicated", async () => {
  const f = fixture(); await f.start(); await f.turn();
  assert.equal(f.sent.length, 1);
  await f.run(); assert.equal(f.switches, 1); assert.equal(f.calls, 1);
+});
+
+test("busy handoffs abort and wait for idle before generation", async () => {
+ for (const args of ["--auto", ""]) {
+  const f = fixture();
+  let idle = false, aborted = false;
+  let release!: () => void;
+  const stopped = new Promise<void>(resolve => { release = resolve; });
+  f.ctx.isIdle = () => idle;
+  f.ctx.abort = () => { aborted = true; };
+  f.ctx.waitForIdle = () => stopped;
+  f.generation(() => assert.equal(idle, true, "snapshot must be taken after idle"));
+  const running = f.run(args);
+  assert.equal(aborted, true);
+  assert.equal(f.calls, 0, "no generation while main agent is stopping");
+  assert.equal(f.switches, 0);
+  idle = true;
+  f.ctx.signal = undefined;
+  release();
+  await running;
+  assert.equal(f.calls, 1);
+  assert.equal(f.switches, 1);
+ }
+});
+
+test("session switch or child launch while stopping blocks generation", async () => {
+ for (const change of ["session", "child"]) {
+  const f = fixture();
+  f.ctx.isIdle = () => false;
+  f.ctx.abort = () => {};
+  f.ctx.waitForIdle = async () => {
+   if (change === "session") f.changeSession();
+   else f.lifecycle(child("started"));
+  };
+  await f.run();
+  assert.equal(f.calls, 0);
+  assert.equal(f.switches, 0);
+ }
+});
+
+test("owned children defer without interrupting the parent", async () => {
+ const f = fixture([child("started")]);
+ f.ctx.isIdle = () => false;
+ f.ctx.abort = () => assert.fail("must not abort while a child is owned");
+ await f.run();
+ assert.equal(f.calls, 0);
 });
 
 test("session or branch changes during generation never replace new context", async () => {

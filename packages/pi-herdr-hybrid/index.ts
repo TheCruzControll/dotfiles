@@ -25,10 +25,16 @@ import { chmodSync, constants as fsConstants, copyFileSync, existsSync, mkdirSyn
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { embedBackground, readExecutionMode, writeExecutionMode, type ExecutionMode } from './src/execution.ts';
+const backgrounds = new WeakMap<object, ReturnType<typeof embedBackground>>();
+const backgroundIds = new Set<string>();
+let initializeBackground: Parameters<typeof embedBackground>[1];
+
 import { registerWorkflows } from "./src/workflows.ts";
+import { PreflightSchema } from './src/preflight.ts';
 import { recordChildLifecycle, outcomeStatus, type ChildIdentity } from "./src/child-lifecycle.ts";
 import { captureRecovery, recoverOwnedChildren, socketIdentity } from "./src/recovery.ts";
-import { requestChildAdmission, CHILD_ADMISSION_PROBE } from './src/admission.ts';
+import { requestChildAdmission, CHILD_ADMISSION, CHILD_ADMISSION_PROBE } from './src/admission.ts';
 
 import {
   discoverAgentDefinitions,
@@ -451,7 +457,10 @@ function armWatcher(
 
 // ── tool parameter schema (ported, minus Claude-only resumeSessionId) ───────
 
+const ExecutionModeSchema = Type.Optional(Type.Union([Type.Literal('background'), Type.Literal('pane')]));
 const SubagentParams = Type.Object({
+  executionMode: ExecutionModeSchema,
+  preflight: Type.Optional(PreflightSchema),
   name: Type.String({ description: "Display name for the subagent" }),
   task: Type.String({ description: "Task/prompt for the sub-agent" }),
   agent: Type.Optional(
@@ -496,7 +505,7 @@ const SubagentParams = Type.Object({
 });
 
 const SUBAGENT_DESCRIPTION =
-  "Spawn a sub-agent in a dedicated herdr pane. " +
+  'Spawn a sub-agent using the persistent Background/Pane preference; executionMode overrides this launch. Background is default. Unsupported settings fail closed; select Pane explicitly. ' +
   "This is a fire-and-forget async tool: the call returns immediately with only an acknowledgement. " +
   "When the sub-agent finishes, the harness AUTOMATICALLY delivers its result as a steer message that wakes you up and starts a new turn — you do not need to do anything to receive it. " +
   "DO NOT write polling loops, sleep/wait commands, tail/watch scripts, or repeatedly read session/log files to detect completion. DO NOT call subagents_list or any other tool to 'check' status. All of that is wasted work — the harness handles delivery for you. " +
@@ -569,6 +578,18 @@ async function executeSubagentSpawn(
     );
   }
 
+  if ((params.executionMode ?? readExecutionMode()) === 'background') {
+    try {
+      const result = await backgrounds.get(pi)!.spawn(toolCallId ?? 'hybrid-launch', params, signal, ctx);
+      if (result.details?.id) {
+        backgroundIds.add(result.details.id);
+        pi.appendEntry('hybrid-background', { id: result.details.id });
+      }
+      return result;
+    } catch (error) { return errorResult(String(error), 'background launch refused'); }
+  }
+
+  if (!isInsideHerdr()) return errorResult(SETUP_HINT, 'herdr setup incomplete');
   const agentDefs = params.agent ? loadAgentDefaults(params.agent) : null;
   if (params.agent && !agentDefs) {
     const projectPath = join(process.cwd(), ".pi", "agents", `${params.agent}.md`);
@@ -830,7 +851,7 @@ function resolveResumeOutcome(
 }
 
 const RESUME_DESCRIPTION =
-  "Resume a previous sub-agent session in a new herdr pane. " +
+  "Resume a previous sub-agent on its original backend: Background uses the exact receipt id; Pane uses its retained session file. Cross-backend conversion is refused. " +
   "This is a fire-and-forget async tool: the call returns immediately with only an acknowledgement. " +
   "When the resumed sub-agent finishes, the harness AUTOMATICALLY delivers its result as a steer message that wakes you up and starts a new turn — you do not need to do anything to receive it. " +
   "DO NOT write polling loops, sleep/wait commands, tail/watch scripts, or repeatedly read session/log files to detect completion. DO NOT poll for status. All of that is wasted work — the harness handles delivery for you. " +
@@ -839,7 +860,7 @@ const RESUME_DESCRIPTION =
 
 async function executeSubagentResume(
   pi: ExtensionAPI,
-  params: { sessionPath: string; name?: string; message?: string; autoExit?: boolean },
+  params: { sessionPath: string; name?: string; message?: string; autoExit?: boolean; executionMode?: ExecutionMode; preflight?: unknown },
   ctx: {
     cwd: string;
     model?: { provider: string; id: string };
@@ -855,6 +876,14 @@ async function executeSubagentResume(
   const generation = sessionGeneration;
   const moduleSignal = getModuleAbortSignal();
   if (signal?.aborted || moduleSignal.aborted) return errorResult("Launch aborted", "aborted");
+  if (backgroundIds.has(params.sessionPath)) {
+    if (params.executionMode === 'pane' || params.autoExit !== undefined || params.name !== undefined || params.preflight !== undefined) return errorResult('Background resume cannot convert to Pane or apply pane-only settings (including preflight). Select the original backend.', 'unsupported resume');
+    const result = await backgrounds.get(pi)!.execute(toolCallId ?? 'hybrid-resume', { ...params, action: 'resume', id: params.sessionPath, message: params.message }, signal, undefined, ctx);
+    const id = result.details?.runId ?? result.details?.asyncId;
+    if (id) { backgroundIds.add(id); pi.appendEntry('hybrid-background', { id }); }
+    return result;
+  }
+  if (params.executionMode === 'background') return errorResult('Cannot convert a pane session to Background. Select Pane explicitly.', 'unsupported conversion');
   if (!existsSync(params.sessionPath)) {
     return errorResult(
       `Error: session file not found: ${params.sessionPath}`,
@@ -955,7 +984,9 @@ function registerResumeTool(pi: ExtensionAPI): void {
     description: RESUME_DESCRIPTION,
     promptSnippet: RESUME_DESCRIPTION,
     parameters: Type.Object({
-      sessionPath: Type.String({ description: "Path to the session .jsonl file to resume" }),
+      preflight: Type.Optional(PreflightSchema),
+      executionMode: ExecutionModeSchema,
+      sessionPath: Type.String({ description: "Exact Background receipt id, or Pane session .jsonl path, to resume" }),
       name: Type.Optional(
         Type.String({ description: "Display name for the herdr pane. Default: 'Resume'" }),
       ),
@@ -1036,6 +1067,7 @@ export function resolveInterruptTarget(params: {
 }
 
 async function handleSubagentInterrupt(params: { id?: string; name?: string }, pi?: ExtensionAPI) {
+  if (pi && params.id && backgroundIds.has(params.id)) return backgrounds.get(pi)!.execute('hybrid-interrupt', { action: 'interrupt', id: params.id }, undefined, undefined, latestCtx);
   const resolved = resolveInterruptTarget(params);
   if ("error" in resolved) {
     return errorResult(resolved.error, resolved.error);
@@ -1290,6 +1322,21 @@ function registerCommands(pi: ExtensionAPI): void {
 
 export default function herdrSubagents(pi: ExtensionAPI) {
   const inHerdr = isInsideHerdr();
+  backgrounds.set(pi, embedBackground(pi, initializeBackground));
+  pi.registerCommand('subagents-mode', {
+    description: 'Default execution backend: background | pane | reset (no arguments: status)',
+    handler: async (args, ctx) => {
+      const mode = args.trim();
+      if (mode && !['background', 'pane', 'reset'].includes(mode)) { ctx.ui.notify('Usage: /subagents-mode [background|pane|reset]', 'error'); return; }
+      try {
+        if (mode) writeExecutionMode(mode as ExecutionMode | 'reset');
+        ctx.ui.notify(`Subagents default: ${readExecutionMode()}`, 'info');
+      } catch (error) { ctx.ui.notify(String(error), 'error'); }
+    },
+  });
+  pi.events.on('subagent:async-complete', (data: any) => {
+    void workflowOutcome?.(data.runId, { kind: data.success === true || (data.results?.length && data.results.every((r: any) => r.success === true)) ? 'completed' : 'crashed', summary: data.summary ?? data.results?.map((r: any) => r.summary ?? r.output ?? '').join('\n') });
+  });
 
   // Tools denied via PI_DENY_TOOLS env var (set by parent agent based on frontmatter)
   const deniedTools = new Set(
@@ -1301,7 +1348,7 @@ export default function herdrSubagents(pi: ExtensionAPI) {
   const shouldRegister = (name: string) => !deniedTools.has(name);
 
   let registeredRealTools = false;
-  if (inHerdr) {
+  {
     if (shouldRegister("subagent")) registerSubagentTool(pi);
     if (shouldRegister("subagent_resume")) registerResumeTool(pi);
     if (shouldRegister("subagent_interrupt")) registerInterruptTool(pi);
@@ -1313,6 +1360,14 @@ export default function herdrSubagents(pi: ExtensionAPI) {
     registeredRealTools = true;
   }
 
+  const restoreBackgroundIds = (ctx: any) => {
+    latestCtx = ctx;
+    backgroundIds.clear();
+    for (const entry of ctx.sessionManager.getBranch?.() ?? []) {
+      if (entry.customType === 'hybrid-background' && typeof entry.data?.id === 'string') backgroundIds.add(entry.data.id);
+    }
+  };
+  pi.on('session_tree', (_event, ctx) => restoreBackgroundIds(ctx));
   pi.on("session_start", (_event, ctx) => {
     sessionGeneration++;
     for (const running of runningSubagents.values()) {
@@ -1321,15 +1376,9 @@ export default function herdrSubagents(pi: ExtensionAPI) {
     }
     runningSubagents.clear();
     if (getModuleAbortSignal().aborted) (globalThis as any)[ABORT_KEY] = new AbortController();
-    latestCtx = ctx;
+    restoreBackgroundIds(ctx);
 
-    if (!inHerdr) {
-      // Defer: only provide setup-hint stubs when nothing else provides
-      // `subagent` (i.e. pi-interactive-subagents is not loaded).
-      const hasSubagent = pi.getAllTools().some((tool) => tool.name === "subagent");
-      if (!hasSubagent) registerSetupHintStubs(pi, shouldRegister);
-      return;
-    }
+    if (!inHerdr) return;
 
     const recovery = recoverOwnedChildren(ctx.sessionManager.getBranch?.() ?? [], {
       ownerSessionFile: ctx.sessionManager.getSessionFile() ?? '',
@@ -1376,13 +1425,22 @@ export default function herdrSubagents(pi: ExtensionAPI) {
   });
 
   pi.events.on(CHILD_ADMISSION_PROBE, (request: any) => {
-    if (request?.version !== 1 || !inHerdr || !registeredRealTools) return;
+    if (request?.version !== 1 || !registeredRealTools) return;
     const winner = pi.getAllTools().find(tool => tool.name === request.toolName);
     if (winner?.sourceInfo?.path === MODULE_PATH) request.supported = true;
   });
 
+  pi.events.on('workflow:child-backend-binding', (event: any) => {
+    if (event?.executionMode === 'background' && typeof event.id === 'string') backgroundIds.add(event.id);
+  });
+
   pi.events.on('workflow:child-interrupt-request', (request: any) => {
-    if (request?.version !== 1 || typeof request.id !== 'string' || !runningSubagents.has(request.id)) return;
+    if (request?.version !== 1 || typeof request.id !== 'string') return;
+    if (backgroundIds.has(request.id)) {
+      void handleSubagentInterrupt({ id: request.id }, pi);
+      return;
+    }
+    if (!runningSubagents.has(request.id)) return;
     void handleSubagentInterrupt({ id: request.id }, pi).catch((error) => {
       const child = runningSubagents.get(request.id);
       if (child) recordChildLifecycle(pi, child, 'unresolved', `parent cancellation interrupt failed: ${String(error)}`);
@@ -1419,6 +1477,7 @@ export default function herdrSubagents(pi: ExtensionAPI) {
 // ── test seam ───────────────────────────────────────────────────────────────
 
 export const __test__ = {
+  setBackgroundInitializer(initialize: Parameters<typeof embedBackground>[1]) { initializeBackground = initialize; },
   isInsideHerdr,
   runningSubagents,
   renderSubagentWidgetLines,

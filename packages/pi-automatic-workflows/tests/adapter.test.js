@@ -55,6 +55,12 @@ test('Herdr acknowledgement remains active until an owned completion message',as
     hooks.get('message_end')({message:{customType:'subagent_result',details}});
     assert.equal(entries.at(-1).data.task.childRuns[0].status,'active');
   }
+  for (const value of ['completed','cleanup']) {
+    const result = await tools.get('workflow_update').execute('blocked',{action:'stage',value},null,null,ctx);
+    assert.equal(result.isError,true);
+    assert.match(result.content[0].text,/Owned children remain unresolved/);
+    assert.notEqual(entries.at(-1).data.task.stage,value);
+  }
   hooks.get('message_end')({message:{customType:'subagent_result',details:{sessionFile:'/fixture/child.jsonl'}}});
   assert.equal(entries.at(-1).data.task.childRuns[0].status,'completed');
   const admission=input=>{const r={version:1,parentCwd:temp,parentModel:'test/parent',model:'test/parent',handled:false,allowed:false,...input};bus.get('workflow:child-admission')(r);return r;};

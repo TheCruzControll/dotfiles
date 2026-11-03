@@ -230,10 +230,11 @@ describe("subagent-done: subagent_done tool writes sidecar and shuts down", () =
       { messages: [{ role: "assistant", stopReason: "stop" }] },
       fakeCtx,
     );
+    handlers.agent_settled?.({ aborted: false }, fakeCtx);
     assert.equal(
       existsSync(`${sessionFile}.exit`),
       false,
-      "agent_end must not recreate a sidecar already consumed by the watcher",
+      "agent_settled must not recreate a sidecar already consumed by the watcher",
     );
   });
 
@@ -308,7 +309,7 @@ describe("subagent-done: user close without subagent_done leaves no sidecar", ()
     return join(dir, "child.jsonl");
   }
 
-  it("no sidecar written when agent_end fires after abort (user Escape)", async () => {
+  it("no sidecar written when an aborted reply reaches non-aborted settlement", async () => {
     const sessionFile = makeSessionFile();
     const origSession = process.env.PI_SUBAGENT_SESSION;
     const origAutoExit = process.env.PI_SUBAGENT_AUTO_EXIT;
@@ -344,6 +345,7 @@ describe("subagent-done: user close without subagent_done leaves no sidecar", ()
       { messages: [{ role: "assistant", stopReason: "aborted" }] },
       fakeCtx,
     );
+    handlers.agent_settled?.({ aborted: false }, fakeCtx);
 
     assert.equal(shutdownCalled, false, "should NOT shutdown on abort");
     let sidecarExists = false;
@@ -429,14 +431,14 @@ describe("subagent-done: session_shutdown context usage fallback", () => {
   });
 });
 
-describe("subagent-done: agent_end writes .exit sidecar on clean auto-exit", () => {
+describe("subagent-done: agent_settled writes .exit sidecar on clean auto-exit", () => {
   function makeSessionFile(): string {
     const dir = mkdtempSync(join(tmpdir(), "herdr-done-"));
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
     return join(dir, "child.jsonl");
   }
 
-  it("writes done sidecar when agent_end triggers auto-exit", async () => {
+  it("writes done sidecar only after non-aborted final settle", async () => {
     const sessionFile = makeSessionFile();
     const origSession = process.env.PI_SUBAGENT_SESSION;
     const origAutoExit = process.env.PI_SUBAGENT_AUTO_EXIT;
@@ -475,9 +477,14 @@ describe("subagent-done: agent_end writes .exit sidecar on clean auto-exit", () 
       fakeCtx,
     );
 
-    assert.equal(shutdownCalled, true, "should have called shutdown");
-    const sidecar = readFileSync(`${sessionFile}.exit`, "utf8");
-    assert.equal(sidecar, '{"type":"done"}', "should write done sidecar on auto-exit");
+    assert.equal(shutdownCalled, false, 'agent_end is not final idle');
+    assert.throws(() => readFileSync(`${sessionFile}.exit`));
+    handlers.agent_settled?.({ aborted: true }, fakeCtx);
+    assert.equal(shutdownCalled, false, 'aborted settle cannot complete a child');
+    handlers.agent_end?.({ messages: [{ role: 'assistant', stopReason: 'stop' }] }, fakeCtx);
+    handlers.agent_settled?.({ aborted: false }, fakeCtx);
+    assert.equal(shutdownCalled, true);
+    assert.equal(readFileSync(`${sessionFile}.exit`, 'utf8'), '{"type":"done"}');
   });
 
   it("does NOT write done sidecar when agent_end is an error (retry)", async () => {
@@ -516,6 +523,7 @@ describe("subagent-done: agent_end writes .exit sidecar on clean auto-exit", () 
       fakeCtx,
     );
 
+    handlers.agent_settled?.({ aborted: false }, fakeCtx);
     assert.equal(shutdownCalled, false, "should NOT shutdown on error");
     let sidecarExists = false;
     try { readFileSync(`${sessionFile}.exit`); sidecarExists = true; } catch {}
@@ -557,6 +565,7 @@ describe("subagent-done: agent_end writes .exit sidecar on clean auto-exit", () 
       fakeCtx,
     );
 
+    handlers.agent_settled?.({ aborted: false }, fakeCtx);
     assert.equal(shutdownCalled, false, "should keep the nested orchestrator alive");
     let sidecarExists = false;
     try { readFileSync(`${sessionFile}.exit`); sidecarExists = true; } catch {}

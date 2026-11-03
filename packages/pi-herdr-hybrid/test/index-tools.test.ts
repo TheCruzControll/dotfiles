@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { captureRecovery } from '../src/recovery.ts';
 
 import herdrSubagents, { __test__ } from "../index.ts";
+__test__.setBackgroundInitializer(() => {}); // Pane regression suite isolates the embedded upstream lifecycle.
 import type { RunningSubagent, SubagentOutcome } from "../src/watcher.ts";
 
 // ── env management (same discipline as index.test.ts) ──────────────────────
@@ -77,6 +78,10 @@ function createFakePi() {
       emit(type: string, data: any) { if (type === 'workflow:child-lifecycle') lifecycle.push({ type, data }); for (const fn of eventHandlers.get(type) ?? []) fn(data); },
     },
     registerTool(tool: any) {
+      if (tool.name === 'subagent' || tool.name === 'subagent_workflow') {
+        const execute = tool.execute;
+        tool = { ...tool, execute: (id: any, args: any, ...rest: any[]) => execute(id, { executionMode: 'pane', ...args }, ...rest) };
+      }
       registeredTools.push(tool);
     },
     registerCommand(name: string, options: any) {

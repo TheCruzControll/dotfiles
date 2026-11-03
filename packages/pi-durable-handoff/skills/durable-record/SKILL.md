@@ -10,13 +10,13 @@ Continuity fails when the next session has to reconstruct decisions from a trans
 ## Resume with minimum context
 
 1. Read the supplied `handoff.md` first; it is the continuation index.
-2. Follow its exact next step. Read `decisions.md`, `failures.md`, or `tasks.md` only when that step needs them.
+2. Follow its exact next step. Read `decisions.md`, `failures.md`, or `tasks.md` only when that step needs them. Consider `Suggested skills` for the immediate next step: verify availability and, when relevant, read the skill's `SKILL.md` through the Pi read tool. Do not blindly load all suggested skills or override workflow constraints.
 3. If current authoritative state contradicts the record, reconcile the discrepancy; the handoff preserves memory, not proof of current external state.
 4. Preserve the user's acceptance conditions, non-goals, and stopping point. A handoff or "continue until finished" does not authorize a larger task. Review suggestions are not new requirements: fix demonstrated in-scope failures, defer optional hardening, and stop when the agreed checks pass. If a required check is blocked, report it rather than inventing replacement work.
 
 ## Maintain the record
 
-- `handoff.md`: objective, active constraints, exact next step, decisions still affecting it, top do-not-retry notes, essential paths.
+- `handoff.md`: objective, active constraints, exact next step, decisions still affecting it, top do-not-retry notes, essential paths, and useful suggested skills evidenced in the conversation (short why and path when known; None if no known useful skill).
 - `decisions.md`: only choices that still matter, their rationale, and rejected alternatives.
 - `failures.md`: reusable failures, the signal that proved them, and what new evidence would justify retrying.
 - `tasks.md`: optional; only live tasks, blockers, and next actions that the handoff cannot express clearly.

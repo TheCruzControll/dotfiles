@@ -74,11 +74,13 @@ test('fake-clock adapter persists, queues busy checks, restores pins, gates appr
   assert.ok(terminalHistory.some(j=>j.status==='cancelled'));
   const completed=await tools.get('workflow_update').execute('complete',{action:'stage',value:'completed'},null,null,ctx);
   assert.ok(!completed.isError);
+  assert.equal(entries.at(-1).data.task.stage,'completed');
   hooks.get('session_shutdown')({},ctx);assert.equal(timer,undefined);
   await hooks.get('session_start')({},ctx);
   assert.deepEqual(entries.at(-1).data.task.waits,terminalHistory);
   const cleanup=await tools.get('workflow_update').execute('cleanup',{action:'stage',value:'cleanup'},null,null,ctx);
   assert.ok(!cleanup.isError);
+  assert.equal(entries.at(-1).data.task.stage,'cleanup');
   hooks.get('session_shutdown')({},ctx);assert.equal(timer,undefined);
  } finally {Date.now=realNow;globalThis.setTimeout=realSet;globalThis.clearTimeout=realClear;if(oldStore===undefined)delete process.env.PI_AUTOMATIC_WORKFLOWS_REVISION_STORE;else process.env.PI_AUTOMATIC_WORKFLOWS_REVISION_STORE=oldStore;}
 });

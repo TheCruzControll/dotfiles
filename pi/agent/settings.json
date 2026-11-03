@@ -1,37 +1,99 @@
 {
-  "lastChangelogVersion": "1.4.0",
-  "defaultProvider": "openai",
-  "defaultModel": "gpt-6.1-sol",
+  "lastChangelogVersion": "1.5.0",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-fable-5-1",
   "defaultThinkingLevel": "medium",
-  "enabledModels": [
-    "openai/gpt-6.1-sol",
-    "openai/gpt-5.5-pro",
-    "anthropic/claude-sonnet-5-5",
-    "openai/gpt-5.4-mini",
-    "openai/gpt-6-luna"
-  ],
   "externalEditor": "nvim",
   "extensions": [
-    "-builtin:llama.cpp"
+    "-builtin:llama.cpp",
+    "-/Users/franciscruz/.pi/agent/extensions/workflow-observer/index.js"
   ],
   "packages": [
-    "npm:pi-agent-browser-native@0.9.6",
     "npm:@juicesharp/rpiv-ask-user-question@2.15.0",
     "npm:pi-web-access@0.46.0",
     "npm:@juicesharp/rpiv-todo@2.15.0",
     "~/.pi/agent/local-packages/pi-herdr-hybrid",
     "~/.pi/agent/local-packages/pi-automatic-workflows",
     "~/.pi/agent/local-packages/pi-verified-workflows",
-    "git:github.com/DietrichGebert/ponytail@96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
+    {
+      "source": "git:github.com/DietrichGebert/ponytail@96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
+      "skills": [
+        "!skills/ponytail-gain/SKILL.md",
+        "!skills/ponytail-audit/SKILL.md",
+        "!skills/ponytail-debt/SKILL.md",
+        "!skills/ponytail-help/SKILL.md"
+      ]
+    },
     {
       "source": "~/.pi/agent/local-packages/pi-durable-handoff",
       "extensions": [
         "extensions/durable-handoff.ts"
       ]
-    }
+    },
+    "npm:pi-background-tasks@2.6.10",
+    "npm:@schovest/pi-goal"
+  ],
+  "skills": [
+    "-/Users/franciscruz/.agents/skills/agents-sdk/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/basin/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cf-cli/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cloudflare/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cloudflare-email-service/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cloudflare-one/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cloudflare-one-migrations/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/durable-objects/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/gateway-workers/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/k2/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/nextjs-on-cloudflare/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/sandbox-migrate-to-next/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/sandbox-next/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/sandbox-stable/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/turnstile-spin/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/web-perf/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/workers-best-practices/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/workers-profiling/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/wrangler/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/cavecrew/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-commit/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-compress/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-discover/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-evidence-review/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-explore/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-help/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-learn/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-manage/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-optimize/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-review/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-setup/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/caveman-stats/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/megacave/SKILL.md",
+    "-/Users/franciscruz/.agents/skills/ultracave/SKILL.md"
   ],
   "showHardwareCursor": true,
   "terminal": {
-    "imageWidthCells": 120
-  }
+    "imageWidthCells": 120,
+    "showTerminalProgress": false
+  },
+  "extensionChangelogVersions": {
+    "{\"source\":\"npm:pi-agent-browser-native@0.9.6\",\"scope\":\"user\"}": "0.9.6",
+    "{\"source\":\"npm:pi-web-access@0.46.0\",\"scope\":\"user\"}": "0.46.0"
+  },
+  "hideThinkingBlock": false,
+  "enableSkillCommands": true,
+  "editorPaddingX": 1,
+  "markdown": {
+    "mermaid": "final"
+  },
+  "enabledModels": [
+    "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
+    "anthropic/claude-opus-5-5",
+    "anthropic/claude-haiku-5-5",
+    "anthropic/claude-sonnet-5-5",
+    "openai/gpt-6-astra",
+    "openai/gpt-6-luna",
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-terra"
+  ]
 }
