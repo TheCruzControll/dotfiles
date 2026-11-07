@@ -1,12 +1,12 @@
 ---
 name: show-me-your-work
-description: "Keep a reviewable decision trail for long-running or unattended work: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /show-me-your-work, autonomous or multi-phase runs, or work a human reviews after stepping away."
+description: "Keep a reviewable decision trail for long-running or unattended work: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /skill:show-me-your-work, autonomous or multi-phase runs, or work a human reviews after stepping away."
 disable-model-invocation: true
 ---
 
 # Show me your work
 
-Keep one canonical log.
+Keep one canonical log. Paths to skill files below are relative to this skill's directory.
 
 ## The format
 
@@ -33,7 +33,7 @@ ts	phase	decision	why	evidence	result
 
 ## Logging a row
 
-Write each entry the way you'd tell a teammate what you did. Plain words, concrete actions, no AI speak or abstract jargon (the **unslop** skill applies to log text too).
+Write each entry the way you'd tell a teammate what you did. Plain words, concrete actions, no AI speak or abstract jargon (read and follow `../unslop/SKILL.md` for log text too).
 
 Use the helper `scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <result>`. It stamps `ts`, writes the header on first use, strips stray tabs/newlines, and prefixes any cell starting with `=`, `+`, `-`, or `@` with a single quote. A bare `printf` appending a row works too, but mind those same bytes if cells come from generated or user-supplied text.
 
@@ -50,11 +50,11 @@ Commit it only when the work is ambitious enough that a reviewer needs the trail
 ## Rules
 
 - Append-only. A wrong call gets a new row that supersedes it. Never edit or delete history.
-- Prefer evidence produced by committed scripts over hand-made one-offs (the **encode-lessons-in-structure** principle skill).
+- Prefer evidence produced by committed scripts over hand-made one-offs (read `../principle-encode-lessons-in-structure/SKILL.md`).
 
 ## Audit the log against the transcript
 
-At the end of the run, before handing back, check the log told the truth. Read this run's transcript under the active workspace's `agent-transcripts/` directory (the system prompt names the path). Don't glob across `~/.cursor/projects/*/`. That reads unrelated private chats. Walk this run's rows against what actually happened. Each stretch of them begins at one of this run's `start` rows, or at the first row if this run created the log, and ends at the next `start` row of another run:
+At the end of the run, before handing back, check the log told the truth. Read this run's pi session transcript under `~/.pi/agent/sessions/<slug>/<timestamp>_<uuid>.jsonl`. The slug is `--` plus the workspace path without its leading `/`, with remaining `/` characters replaced by `-`, plus `--`. Identify this run's session by its id or provided path; the newest file alone may belong to another run. For a subagent, use its `$TMPDIR/pi-subagents-<uid>/…/tasks/<agent-id>.output` transcript or its persisted session beside the parent's. Read only this workspace's files, not unrelated private chats. Walk this run's rows against what actually happened. Each stretch of them begins at one of this run's `start` rows, or at the first row if this run created the log, and ends at the next `start` row of another run:
 
 - Check that every row maps to a real decision or action.
 - Check that each row's evidence resolves and shows what the row claims.
@@ -64,7 +64,7 @@ Correct the log, not the story. The audit never edits or removes a row, even an 
 
 ## Cross-model review of the trail
 
-Before handing back, spawn a subagent on a different model family from the one that did the work. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky. Pick each subagent's reasoning level and fast or standard speed for the job, per the Subagents section of the **orchestrator** skill.
+Before handing back, spawn an `Agent` with `subagent_type: "Explore"` on a different model family from the one that did the work; include the audit trail and transcript paths in its prompt and tell it not to edit files. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky. Read `../orchestrator/SKILL.md` for the Subagents section; pass `model` and `thinking` separately. Use the configured judgment and prose role from `~/.pi/agent/orchestrator-models.md` (default `anthropic/claude-opus-5-5:xhigh`) if it names a different family. Otherwise use `openai/gpt-6.1-sol:high` when the work used Anthropic, or `anthropic/claude-opus-5-5:xhigh` for other families. If the requested model cannot resolve or is not from a different family, say so; do not present the result as cross-model review.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.
