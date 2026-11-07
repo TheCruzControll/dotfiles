@@ -10,6 +10,10 @@ const DIR_LINE = "Orchestrator skill directory:";
 // A prompt (or brief) that merely mentions the marker must not suppress injection.
 const INJECTED = `${BEGIN}\n${DIR_LINE}`;
 const STATE = "orchestrator-state";
+// Without this header models read the block as reference text and skip it, or call small code tasks trivial.
+const HEADER = `# Orchestrator mode is active
+The orchestrator rules below govern how you handle every user message in this session. They take precedence over default habits. Before acting on a message, apply its Trivial prompts gate. Small is not trivial: any file edit, code change, or multi-step task is non-trivial. For anything non-trivial, follow its Non-negotiables first: restate the user's goal in your first message, match a playbook, and open a \`todo\` list whose first items are that playbook's steps, then work the steps, delegating through \`Agent\` where the playbook says to.
+`;
 
 // pi-subagents tags every child prompt with <active_agent name="..."/> (src/prompts.ts buildAgentPrompt);
 // append-mode children inherit their parent's tags first, so the last tag names this session. None = main session.
@@ -34,6 +38,7 @@ function block(): string {
 	return [
 		`\n\n${BEGIN}`,
 		`${DIR_LINE} ${SKILL_DIR}; resolve relative links in it against that directory.\n`,
+		HEADER,
 		skill.trim() + models,
 		END,
 	].join("\n");
