@@ -15,7 +15,7 @@ Mechanics first, history second. Each skill's report tells you which sources it 
 ## Restate a noisy report before touching code
 
 ```text
-/poteto-mode read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.
+/orchestrator read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.
 ```
 
 A misreading shows up in the restatement, where it costs one message to correct. Keep your own theory to yourself until the agent has stated its own. `/in-your-own-words` asks for the restatement alone, with no playbook.
@@ -31,7 +31,7 @@ The agent names what an expert would do that you didn't ask for, the raw materia
 ## Prototype before you pick
 
 ```text
-/poteto-mode prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.
+/orchestrator prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.
 ```
 
 You pick from things that run, not from descriptions. The agent answers its own layout and timing questions along the way.
@@ -39,7 +39,7 @@ You pick from things that run, not from descriptions. The agent answers its own 
 ## Turn a settled design into a plan
 
 ```text
-/poteto-mode turn this design into a plan. small verifiable PRs, each with its own proof.
+/orchestrator turn this design into a plan. small verifiable PRs, each with its own proof.
 ```
 
 Ask only after the design settles. The plan is the deliverable, and it names the playbook that will execute it.
@@ -71,7 +71,7 @@ The qualifiers do real work. "don't change anything yet" keeps it read-only, and
 ## Fix a bug through a failing test
 
 ```text
-/poteto-mode repro the duplicate write first. if there's a cheap test path, /tdd it. then fix and rerun.
+/orchestrator repro the duplicate write first. if there's a cheap test path, /tdd it. then fix and rerun.
 ```
 
 "if there's a cheap test path" matters. Forcing a test through brittle mocks proves less than running the real command, and the playbook is allowed to say so.
@@ -79,7 +79,7 @@ The qualifiers do real work. "don't change anything yet" keeps it read-only, and
 ## Repro and fix a report with proof
 
 ```text
-/poteto-mode repro this with /verify-<app>. if it repros on main, fix it and show me a video as proof.
+/orchestrator repro this with /verify-<app>. if it repros on main, fix it and show me a video as proof.
 ```
 
 "if it repros on main" lets the run stop early when the bug is already gone. The video lets you check the fix before you read the diff.
@@ -111,7 +111,7 @@ The fix lands in the repo as architecture, a type, a lint, or a test, so the nex
 ## Ask how without starting the work
 
 ```text
-/poteto-help how do i get poteto-mode to stay on every turn?
+/orchestrator-help how do i get orchestrator to stay on every turn?
 ```
 
 You get an answer, a prompt to send, and a link to the source. Nothing runs until you send that prompt.
@@ -175,7 +175,7 @@ To watch the catch-up instead, run [`/ketchup-video`](../../skills/ketchup-video
 - **Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` keeps only the findings a rerun proves and lists what it dropped and why, and you can override either way.
 - **Treating `auto` as a model slug.** `auto` and `inherit-parent` mean "omit the model field so the subagent inherits the parent chat model." [Setup](./01-setup.md) covers the roles.
 - **Reporting success off a green build.** A build proves it compiles. Ask for the real command, flow, stored value, or profile, and expect the evidence in the reply.
-- **Writing a `SKILL.md` freehand.** Route it through the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md) so validation and review happen.
+- **Writing a `SKILL.md` freehand.** Route it through the [Authoring or modifying a skill playbook](../../skills/orchestrator/playbooks/authoring-a-skill.md) so validation and review happen.
 
 That's the guide. If you skipped ahead, go back to [setup](./01-setup.md) and run one real task. The habits stick from use, not from reading.
 
