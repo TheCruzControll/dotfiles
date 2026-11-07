@@ -1,16 +1,18 @@
-# Route work through `/orchestrator`
+# Route work through the orchestrator
 
-`/orchestrator` is the front door. You give it a goal, it matches one of twenty-three playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
+The orchestrator is on by default. For nontrivial work, you give it a goal, it matches one of twenty-three playbooks, copies that playbook's steps into the `todo` list, and calls the other skills as the steps need them. Trivial prompts get a direct answer. You can also invoke it with `/skill:orchestrator`; use `/orchestrator on`, `/orchestrator off`, or `/orchestrator status` to control or check it for the session. In this page you learn what a good prompt looks like, and how little of one you actually need.
 
-![A dispatcher pulls a switch lever to route robots on rail handcars toward lit gates, under a /orchestrator departure board listing BUG FIX, FEATURE, and INVESTIGATION.](./images/router.jpg)
+![A dispatcher pulls a switch lever to route robots on rail handcars toward lit gates, under a departure board listing BUG FIX, FEATURE, and INVESTIGATION.](./images/router.jpg)
 
 ## What happens to your prompt
 
 ```mermaid
 flowchart TD
     A[Your prompt] --> B[orchestrator]
-    B --> C[Read the Principles section]
-    C --> D{Match the task}
+    B --> C{Trivial prompt?}
+    C -->|Yes| L[Direct answer]
+    C -->|No| M[Read the Principles section]
+    M --> D{Match the task}
     D -->|Read-only question| E[Investigation]
     D -->|Defect| F[Bug fix]
     D -->|New behavior| G[Feature]
@@ -32,7 +34,7 @@ The diagram shows the common routes. There are also playbooks for hillclimbing a
 You don't write a spec. You say what's wrong or what you want, plus anything you already know that saves the agent time:
 
 ```text
-/orchestrator users get two notifications after a retry. repro first, then fix and verify.
+/skill:orchestrator users get two notifications after a retry. repro first, then fix and verify.
 ```
 
 That's a Bug fix prompt. "repro first" is a real constraint, not politeness, and the playbook honors it. Watch the todo list fill with the Bug fix steps. A skipped step stays visible with `skip: <reason>`.
@@ -50,7 +52,7 @@ A useful prompt carries up to five things, and each one fits in a sentence:
 Here's one prompt with all five:
 
 ```text
-/orchestrator the csv export drops its last row since yesterday's deploy. failing job id is 4812. repro first, then fix. done means the 60k-row fixture exports every row. show me the row counts before and after.
+/skill:orchestrator the csv export drops its last row since yesterday's deploy. failing job id is 4812. repro first, then fix. done means the 60k-row fixture exports every row. show me the row counts before and after.
 ```
 
 Two things are worth leaving out:
@@ -61,25 +63,25 @@ Two things are worth leaving out:
 For a noisy report, such as a long thread or a vague bug, make the restatement the first step:
 
 ```text
-/orchestrator read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.
+/skill:orchestrator read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.
 ```
 
-A misreading shows up in the restatement, before any code exists. Correct it there, and it costs you one message instead of one wrong fix. For the restatement alone, with no playbook, run [`/in-your-own-words`](../../skills/in-your-own-words/SKILL.md). It restates what the agent thinks your goals are and what problem you're trying to solve.
+A misreading shows up in the restatement, before any code exists. Correct it there, and it costs you one message instead of one wrong fix. For the restatement alone, with no playbook, run [`/skill:in-your-own-words`](../../skills/in-your-own-words/SKILL.md). It restates what the agent thinks your goals are and what problem you're trying to solve.
 
-When you're unsure whether a prompt is aimed right, run [`/sharpen`](../../skills/sharpen/SKILL.md) on it before you send it:
+When you're unsure whether a prompt is aimed right, run [`/skill:sharpen`](../../skills/sharpen/SKILL.md) on it before you send it:
 
 ```text
-/sharpen write a migration guide for the v2 config format.
+/skill:sharpen write a migration guide for the v2 config format.
 ```
 
-The agent says what a top professional would do that you didn't ask for, the rawest material they would start from, the methods and tools they would use, and what other than you or the agent would show the result is right. Then it rewrites your prompt to ask for exactly that, deeper but not bigger, and leaves your choices open. It doesn't do the task. Read the rewrite, then send it, for example with `/orchestrator`.
+The agent says what a top professional would do that you didn't ask for, the rawest material they would start from, the methods and tools they would use, and what other than you or the agent would show the result is right. Then it rewrites your prompt to ask for exactly that, deeper but not bigger, and leaves your choices open. It doesn't do the task. Read the rewrite, then send it to the orchestrator.
 
 ## Follow up short
 
 When the conversation already carries the context, the prompt shrinks to almost nothing. All of these are enough:
 
 ```text
-/orchestrator do it
+/skill:orchestrator do it
 ```
 
 ```text
@@ -90,26 +92,26 @@ continue
 keep going until done
 ```
 
-Short works because the playbook holds the structure, and a Custom Mode keeps `/orchestrator` in context on every turn. [Set up pstack](./01-setup.md#run-your-first-task) shows how to start one. Your words carry the intent, and the skill carries the rigor.
+Short works because the playbook holds the structure, and the orchestrator stays in context on every turn by default. [Set up orchestrator](./01-setup.md#run-your-first-task) shows how to get started. Your words carry the intent, and the skill carries the rigor.
 
 ## Switch tasks with "new task"
 
 A long chat accumulates context from the last task. When you change subjects, say so:
 
 ```text
-/orchestrator new task. figure out why the cache entry survives logout. don't change any code yet.
+/skill:orchestrator new task. figure out why the cache entry survives logout. don't change any code yet.
 ```
 
-"new task" tells `/orchestrator` to re-match rather than continue the prior playbook. "don't change any code yet" pins this one to Investigation. Without those two phrases, a mode mid-Feature tends to treat your question as the next feature step.
+"new task" asks the orchestrator to re-match rather than continue the prior playbook. "don't change any code yet" pins this one to Investigation. Without those two phrases, an agent mid-Feature tends to treat your question as the next feature step.
 
-## Give parallel work its own machine
+## Give parallel work its own worktree
 
-If you run several agents against one repository on one computer, they will fight over the working tree, the ports, and the build output. The cleanest isolation is a [cloud subagent](https://cursor.com/docs/subagents#cloud-subagents). Each one gets its own VM and branch, so it can install dependencies, run your app, and record video of the result without touching your machine. Type `/in-cloud` before the task, or ask the parent chat to hand work to cloud subagents.
+If you run several agents against one repository on one computer, they will fight over the working tree, the ports, and the build output. Ask the parent to use `isolation: "worktree"` for parallel agents; each gets a separate git worktree and branch. Worktrees share the machine, so agents must still avoid port and resource conflicts.
 
-When the work has to stay local, ask for a worktree up front:
+Ask for a worktree up front:
 
 ```text
-/orchestrator new task. branch off <base> in a fresh worktree, then port the parser change there.
+/skill:orchestrator new task. branch off <base> in a fresh worktree, then port the parser change there.
 ```
 
 Each task in its own branch and worktree means no agent stomps another's files. Worktrees cost disk and machine resources, so a laptop runs only a handful at once. The [Opening a PR playbook](../../skills/orchestrator/playbooks/opening-a-pr.md) already works from a worktree for code changes, so mostly you only say this when a specific base or location matters.
@@ -117,7 +119,7 @@ Each task in its own branch and worktree means no agent stomps another's files. 
 Worktrees accumulate. When disk gets tight, ask:
 
 ```text
-/orchestrator what's eating my disk? prune the worktrees that are safe to prune.
+/skill:orchestrator what's eating my disk? prune the worktrees that are safe to prune.
 ```
 
 The [Worktree cleanup playbook](../../skills/orchestrator/playbooks/worktree-cleanup.md) classifies every worktree by merge state, uncommitted work, and which chats still touch it. It deletes only what that evidence clears and pauses for your call on anything holding uncommitted work.
@@ -127,12 +129,12 @@ The [Worktree cleanup playbook](../../skills/orchestrator/playbooks/worktree-cle
 When you step away, say what done means and go:
 
 ```text
-/orchestrator im stepping away. keep going until the migration check reports zero old callers. log your decisions.
+/skill:orchestrator im stepping away. keep going until the migration check reports zero old callers. log your decisions.
 ```
 
-Work you'll review later routes through [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs the run's phases and keeps a [`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) decision log. [Run work while you sleep](./07-overnight.md) covers the full overnight contract.
+Work you'll review later routes through [`/skill:figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs the run's phases and keeps a [`/skill:show-me-your-work`](../../skills/show-me-your-work/SKILL.md) decision log. [Run work while you sleep](./07-overnight.md) covers the full overnight contract.
 
-**Pitfall:** don't enumerate skills in your prompt ("use /how, then /architect, then /arena..."). The playbook already sequences them, and a hand-written sequence usually reorders or drops steps the playbook would have kept. Name a skill only when you want to override a specific choice.
+**Pitfall:** don't enumerate skills in your prompt ("use /skill:how, then /skill:architect, then /skill:arena..."). The playbook already sequences them, and a hand-written sequence usually reorders or drops steps the playbook would have kept. Name a skill only when you want to override a specific choice.
 
 Read [`orchestrator`](../../skills/orchestrator/SKILL.md) itself for the full routing rules.
 
