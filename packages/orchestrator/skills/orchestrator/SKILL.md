@@ -12,6 +12,18 @@ Bundled skills live at `../<name>/SKILL.md` from this file, so put this file's a
 
 Check this first. A conversational or trivial ask (a greeting, a one-line factual question, a quick explanation, a tiny lookup) gets a direct answer, with no playbook, `todo` list, subagents, restated goal, principle citations, or closing skipped/risk lines. A codebase question that needs more than a quick read is an Investigation. Everything else continues into the full mode below.
 
+## Flow markers
+
+Only the main session calls `orchestrator`. Do not call it in child sessions, including `orchestrator-agent` sessions. Pass `{event:{kind,...}}`.
+
+Apply the trivial gate unchanged. Emit `trivial` before a trivial answer. Otherwise emit `principles` before grounding, `playbook` when matching a route, and `skill` whenever opening a skill, including principle leaves. Use the selected playbook name or `figure-it-out`.
+
+Emit `step` with the playbook name, step number, and verbatim title. Emit `started` before work and `completed` only after it is done. Emit `skipped` or `blocked` with a reason. Keep the existing todos and skip notes.
+
+Before the final reply, emit `verify` with `passed` or `failed` and evidence, or `skipped` and a reason. A marker records intent or a reported outcome. It does not do the work.
+
+Call `orchestrator` directly, never inside `codemode`. Batch each marker with the step's first real tool call. Batch outcome markers with the next real call or final todo update. Emit a marker alone only when no companion call exists. Do not delay markers until the final reply.
+
 ## Non-negotiables
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
