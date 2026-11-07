@@ -13,6 +13,8 @@ pi install ~/dotfiles/packages/orchestrator
 
 [pi-subagents](https://github.com/tintinweb/pi-subagents) provides the `Agent` tool that every playbook spawns through. If it is missing, the extension warns at session start.
 
+The PR watcher (`skills/orchestrator/scripts/watch-pr`) used by the Babysit and Shipping playbooks needs [Bun](https://bun.sh) (`brew install oven-sh/bun/bun`). Without it those playbooks fall back to polling with `gh`.
+
 ## Get started
 
 1. Run [`/skill:setup-orchestrator`](./skills/setup-orchestrator/SKILL.md). It detects your models, asks for a reasoning budget, and writes your role lines (see [Models](#models)).
