@@ -1,9 +1,0 @@
-{
-  "enabled": true,
-  "minNewMessages": 6,
-  "cooldownMs": 900000,
-  "maxMessages": 24,
-  "maxSuggestionsPerRun": 3,
-  "showWidget": true,
-  "statusKey": "workflow-observer"
-}

@@ -1,20 +1,16 @@
 {
   "lastChangelogVersion": "1.5.0",
   "defaultProvider": "anthropic",
-  "defaultModel": "claude-fable-5-1",
+  "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "medium",
   "externalEditor": "nvim",
   "extensions": [
-    "-builtin:llama.cpp",
-    "-/Users/franciscruz/.pi/agent/extensions/workflow-observer/index.js"
+    "-builtin:llama.cpp"
   ],
   "packages": [
     "npm:@juicesharp/rpiv-ask-user-question@2.15.0",
     "npm:pi-web-access@0.46.0",
     "npm:@juicesharp/rpiv-todo@2.15.0",
-    "~/.pi/agent/local-packages/pi-herdr-hybrid",
-    "~/.pi/agent/local-packages/pi-automatic-workflows",
-    "~/.pi/agent/local-packages/pi-verified-workflows",
     {
       "source": "git:github.com/DietrichGebert/ponytail@96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
       "skills": [
@@ -24,14 +20,10 @@
         "!skills/ponytail-help/SKILL.md"
       ]
     },
-    {
-      "source": "~/.pi/agent/local-packages/pi-durable-handoff",
-      "extensions": [
-        "extensions/durable-handoff.ts"
-      ]
-    },
-    "npm:pi-background-tasks@2.6.10",
-    "npm:@schovest/pi-goal"
+    "npm:@schovest/pi-goal",
+    "npm:pi-btw",
+    "npm:@maxiaochao/pi-background-tasks",
+    "npm:@tintinweb/pi-subagents@0.23.1"
   ],
   "skills": [
     "-/Users/franciscruz/.agents/skills/agents-sdk/SKILL.md",
@@ -77,7 +69,8 @@
   },
   "extensionChangelogVersions": {
     "{\"source\":\"npm:pi-agent-browser-native@0.9.6\",\"scope\":\"user\"}": "0.9.6",
-    "{\"source\":\"npm:pi-web-access@0.46.0\",\"scope\":\"user\"}": "0.46.0"
+    "{\"source\":\"npm:pi-web-access@0.46.0\",\"scope\":\"user\"}": "0.46.0",
+    "{\"source\":\"npm:@maxiaochao/pi-background-tasks\",\"scope\":\"user\"}": "0.3.1"
   },
   "hideThinkingBlock": false,
   "enableSkillCommands": true,
@@ -95,5 +88,7 @@
     "openai/gpt-6-luna",
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-terra"
-  ]
+  ],
+  "outputPad": 1,
+  "defaultProjectTrust": "always"
 }

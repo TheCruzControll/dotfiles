@@ -29,9 +29,7 @@ class LinkingTests(unittest.TestCase):
             config.mkdir(parents=True)
             (config / 'init.lua').write_text('original')
             agent = home / '.pi/agent'
-            (agent / 'extensions').mkdir(parents=True)
-            shim = agent / 'extensions/automatic-workflows.js'
-            shim.write_text('old shim')
+            agent.mkdir(parents=True)
             mcp = agent / 'mcp.json'
             mcp.write_text(json.dumps({'mcpServers': {'mega-challenge': {'url': 'https://example.test'}}}))
             link.install(home)
@@ -39,14 +37,12 @@ class LinkingTests(unittest.TestCase):
             self.assertFalse((home / '.dotfiles-backups').exists())
             changes = link.install(home, apply=True)
             self.assertTrue(config.is_symlink())
-            self.assertFalse(shim.exists())
             self.assertFalse(mcp.exists())
             self.assertEqual(link.install(home, apply=True), [])
             manifest = next((home / '.dotfiles-backups').glob('*/manifest.json'))
             self.assertTrue(changes)
             rollback.rollback(manifest, apply=True)
             self.assertEqual((config / 'init.lua').read_text(), 'original')
-            self.assertEqual(shim.read_text(), 'old shim')
             self.assertTrue(mcp.exists())
 
     def test_personal_opt_in_and_refuse_changed_rollback(self):

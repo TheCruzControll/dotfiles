@@ -10,19 +10,15 @@ but are **not** installed by the new installer.
 - `nvim/`: active Neovim configuration and `lazy-lock.json`.
 - `herdr/config.toml`: theme, mouse, sound, and Neovim sidebar shortcuts.
 - `pi/agent/`: Pi settings, clickable paths, Herdr state reporter, RTK extension,
-  design and rook-loop skills, pi-sidebar extension, and subagent configuration.
-- `packages/`: exact local source snapshots of Pi Herdr Hybrid, Conductor /
-  Automatic Workflows, Workflow Observer, Durable Handoff, Verified Workflows and
-  pi-sidebar. `packages/pi-herdr-hybrid/agents/` holds the subagent profiles with
-  per-agent model pins; it is linked to `~/.pi/agent/agents`.
-  Tests and required upstream notices are retained. See `PROVENANCE.md`.
+  design and rook-loop skills, and pi-sidebar extension.
+- `packages/`: local source of pi-sidebar. See `PROVENANCE.md`.
 - `skills/caveman/`: installed Caveman/Cavecrew and engineering skills, including
   their local changes; upstream Apache-2.0 license is included.
-- `personal/mcp.json`: optional personal MCP servers (MEGA, Cloudflare, OpenRouter),
+- `personal/mcp.json`: optional personal MCP servers (MEGA, Cloudflare, OpenRouter,
+  Superlogical, Neon),
   disabled by default.
 
-Active observers remain enabled, matching the original setup. These tools can
-read session content and some actions launch model-backed sessions; review them
+These tools can read session content and some actions launch model-backed sessions; review them
 and your employer's AI policy before using them at work. A work-safe default is
 not a security sandbox or employer approval.
 
@@ -34,7 +30,7 @@ are separate from config linking and may download or execute third-party code.
 Recorded baseline: macOS, Node 24.15.0, Pi 1.5.0, Herdr 0.9.5, Neovim 0.9.4.
 Use Node 24+ for the combined bundle. The Neovim baseline is old: a newer binary
 is a compatibility change to test, not a promise that all old plugins still work.
-Herdr must be >=0.8.2. Conductor's guarded children require macOS sandbox-exec.
+Herdr must be >=0.8.2.
 
 Install Homebrew using its official instructions if needed. On a fresh Mac:
 
@@ -75,8 +71,7 @@ python3 scripts/link.py --apply          # backup conflicts, then link
 Existing destinations (including symlinks) move into
 `~/.dotfiles-backups/<timestamp>/`. Every changed path is recorded in that backup's
 `manifest.json`. Original custom project directories are not deleted. Repeating
-an unchanged installation is a no-op. The old absolute-path Conductor shim is
-backed up because Conductor now loads through the package configuration.
+an unchanged installation is a no-op.
 
 By default, an existing MEGA-only MCP config is backed up, not carried into work.
 A config mixing MEGA and other servers requires manual separation before applying;
@@ -98,13 +93,9 @@ After linking, explicitly allow the dependency downloads:
 ```sh
 pi update --extensions
 herdr plugin install ChmaraX/herdr-nvim
-herdr plugin link "$PWD/packages/pi-herdr-hybrid/herdr-plugin" --enabled
 ```
 
-Only one package should provide the subagent tools. Start Pi inside a Herdr pane.
-Subagent profiles are linked from `packages/pi-herdr-hybrid/agents`; no
-`/subagents-init` step is needed. Each profile may pin a `model:`; Conductor treats
-that pin as owner-approved, so children launch on it without a per-task prompt.
+Start Pi inside a Herdr pane.
 
 The Neovim sidebar plugin's recorded commit was
 `b7c69cab2c1eb8754b505061e942fffc4a557a3e`. The GitHub installer may resolve a newer
@@ -149,8 +140,7 @@ This tests preview, backups, reruns, rollback, paths with spaces, personal opt-i
 and refusal to overwrite subsequent changes. Package tests live beside each tool.
 Plain Node tests need matching Pi host peer modules available in `node_modules`;
 Pi normally supplies those only while loading extensions. Development symlinks are
-machine-local and ignored by Git. Hybrid integration tests launch real children
-and can spend model credits; they are not part of the default migration checks.
+machine-local and ignored by Git.
 
 On another Mac verify: Pi starts without load errors; the preserved skills appear;
 Herdr shows agent state; prefix+e opens Neovim; a requested child can launch and

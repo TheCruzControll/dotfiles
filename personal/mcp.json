@@ -11,6 +11,12 @@
     },
     "openrouter": {
       "url": "https://mcp.openrouter.ai/mcp"
+    },
+    "superlogical": {
+      "url": "https://www.superlogical.com/rex/community-mcp"
+    },
+    "neon": {
+      "url": "https://mcp.neon.tech/mcp"
     }
   }
 }

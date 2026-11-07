@@ -21,16 +21,12 @@ def operations(home, personal=False):
     for source in sorted((ROOT / 'packages').iterdir()):
         if source.is_dir() and not source.name.startswith('.'):
             links.append((source, agent / 'local-packages' / source.name))
-    links.append((ROOT / 'packages/pi-workflow-observer/extension/workflow-observer',
-                  agent / 'extensions/workflow-observer'))
-    links.append((ROOT / 'packages/pi-herdr-hybrid/agents', agent / 'agents'))
     for source in sorted((ROOT / 'skills/caveman').iterdir()):
         if source.is_dir():
             links.append((source, home / '.agents/skills' / source.name))
     if personal:
         links.append((ROOT / 'personal/mcp.json', agent / 'mcp.json'))
-    # Retire the old absolute-path shim: the package now loads Conductor directly.
-    retire = [agent / 'extensions/automatic-workflows.js']
+    retire = []
     # Work-safe mode must not silently preserve the personal MCP connection.
     if not personal and (agent / 'mcp.json').exists():
         config = json.loads((agent / 'mcp.json').read_text())
