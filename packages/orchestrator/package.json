@@ -1,7 +1,7 @@
 {
   "name": "orchestrator",
   "version": "0.1.0",
-  "description": "Always-on engineering orchestrator for pi: playbooks, principles, and deliberate subagents. Forked from pstack.",
+  "description": "Always-on engineering orchestrator for pi: playbooks, principles, and deliberate subagents.",
   "license": "MIT",
   "keywords": ["pi-package"],
   "pi": {

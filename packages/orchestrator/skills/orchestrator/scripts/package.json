@@ -1,5 +1,5 @@
 {
-  "name": "@cursor-skill/orchestrator-tools",
+  "name": "@orchestrator-skill/orchestrator-tools",
   "private": true,
   "type": "module",
   "scripts": {

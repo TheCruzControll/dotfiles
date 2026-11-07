@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@cursor-skill/orchestrator-tools",
+      "name": "@orchestrator-skill/orchestrator-tools",
       "dependencies": {
         "commander": "14.0.0",
       },
