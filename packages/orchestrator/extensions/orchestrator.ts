@@ -6,6 +6,9 @@ import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil
 const SKILL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", "orchestrator");
 const BEGIN = "<!-- orchestrator:begin -->";
 const END = "<!-- orchestrator:end -->";
+const DIR_LINE = "Orchestrator skill directory:";
+// A prompt (or brief) that merely mentions the marker must not suppress injection.
+const INJECTED = `${BEGIN}\n${DIR_LINE}`;
 const STATE = "orchestrator-state";
 
 // pi-subagents tags every child prompt with <active_agent name="..."/> (src/prompts.ts buildAgentPrompt);
@@ -30,7 +33,7 @@ function block(): string {
 		: "";
 	return [
 		`\n\n${BEGIN}`,
-		`Orchestrator skill directory: ${SKILL_DIR}; resolve relative links in it against that directory.\n`,
+		`${DIR_LINE} ${SKILL_DIR}; resolve relative links in it against that directory.\n`,
 		skill.trim() + models,
 		END,
 	].join("\n");
@@ -41,7 +44,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event, ctx) => {
 		const name = agentName(event.systemPrompt);
 		if (name !== undefined && name !== "orchestrator-agent") return;
-		if (event.systemPrompt.includes(BEGIN) || !isEnabled(ctx)) return;
+		if (event.systemPrompt.includes(INJECTED) || !isEnabled(ctx)) return;
 		return { systemPrompt: event.systemPrompt + block() };
 	});
 
