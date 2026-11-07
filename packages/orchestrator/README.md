@@ -1,66 +1,43 @@
-# pstack
+# orchestrator
 
-i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
+An always-on engineering orchestrator for [pi](https://pi.dev). The `orchestrator` skill rides along in every turn: it answers trivial asks directly, and routes real work through a playbook, a set of named engineering principles, and deliberate background subagents. Around it sit 55 situational skills and two subagents.
 
-there's a growing sense that ai writes too much slop code. i agree. i don't want to ship like a team of twenty slop artists. throughput without quality is not a goal i aspire to. if you want to go fast, go deep first. 
+The aim is less code, of higher quality, proven against the real artifact. When one agent can be trusted to write small, verifiable changes, you can run many in parallel with confidence. Every frontier model has different strengths, so the design and review skills run multi-model panels.
 
-**pstack is my answer.** these are the same skills i use every day to ship high quality code at Cursor. this turns cursor into a real engineering team. the goal is not to maximize loc, in fact it's the opposite. pstack helps you write less, but higher quality code.
-
-**pstack gives you fearless parallelism.** when you can go deep on one agent and trust it to write good, verifiable code, you can truly parallelize with confidence. start multiple agents up with `orchestrator` and trust that they'll apply rigorous engineering principles to their work.
-
-**cursor gives you the best of all worlds.** every frontier model has its strengths and weaknesses. use any model with pstack. in fact, many of my skills use multi-model workflows to take advantage of each model's unique strengths.
-
-fork it. improve it. make it yours. PRs are welcome! 
-
-## install
+## Install
 
 ```bash
-/add-plugin pstack
+pi install npm:@tintinweb/pi-subagents@0.23.1
+pi install ~/dotfiles/packages/orchestrator
 ```
 
-in claude code:
+[pi-subagents](https://github.com/tintinweb/pi-subagents) provides the `Agent` tool that every playbook spawns through. If it is missing, the extension warns at session start.
 
-```bash
-/plugin marketplace add cursor/plugins
-/plugin install pstack@cursor-plugins
-```
+## Get started
 
-claude code leaves auto-update off for third-party marketplaces, so pstack stays on the version you installed. to turn it on, run `/plugin`, open the **marketplaces** tab, select `cursor-plugins`, and choose **enable auto-update**. to update once by hand, run `claude plugin update pstack@cursor-plugins`.
-
-claude code prefixes plugin commands and agents, so `/orchestrator` is `/pstack:orchestrator`. the [claude code adapter](./docs/harness/claude-code.md) maps every other cursor name. in claude code, `/pstack:setup-orchestrator` writes your model choices to `~/.claude/rules/pstack-models.md`, and a step that needs a cursor-only feature, such as bugbot or automations, is skipped with a one-line note.
-
-claude code installs a generated copy of pstack, including this readme and the guide, from [`harness/pstack/`](https://github.com/cursor/plugins/tree/main/harness/pstack) at the repository root. after you change pstack, run `node scripts/generate-pstack-harness-trees.mjs` from the repository root and commit the result. ci fails while the generated copy is out of date.
-
-## get started
-
-two steps:
-
-1. run [`/setup-orchestrator`](./skills/setup-orchestrator/SKILL.md), pick a reasoning budget, and choose which models you want.
-2. use [`/orchestrator`](./skills/orchestrator/SKILL.md) whenever you're doing anything that requires rigor.
-
-new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/orchestrator-help`](./skills/orchestrator-help/SKILL.md).
-
-that's it. the other skills are situational, and the mode skill uses them for you as needed. out of the box the mode splits work by model strength: code delegates (feature, refactoring, bug fix, perf, hillclimb) go to grok, while the hardest changes, prose, and judgment go to opus 5.5. the default panel is opus 5.5 / grok. [`/setup-orchestrator`](./skills/setup-orchestrator/SKILL.md) changes any of it.
-
-## usage
-
-use [`/orchestrator`](./skills/orchestrator/SKILL.md) at the start of a task. it reads your request, picks from a set of playbooks, and runs the other skills as the steps need them.
-
-pick `/orchestrator` from the `/` menu before you type your task, so cursor attaches the skill to the message.
-
-### just use [`/orchestrator`](./skills/orchestrator/SKILL.md)
-
-this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-three playbooks:
+1. Run [`/skill:setup-orchestrator`](./skills/setup-orchestrator/SKILL.md). It detects your models, asks for a reasoning budget, and writes your role lines (see [Models](#models)).
+2. Then just prompt. The extension injects the orchestrator skill into the system prompt on every turn, so there is nothing to invoke.
 
 ```
-/orchestrator this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro
-first, then fix and verify.
+this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro first, then fix
+and verify.
 ```
 
 ```
-/orchestrator i'm going to bed. land the stack even if ci flakes. i want everything merged by
-morning.
+i'm going to bed. land the stack even if ci flakes. i want everything merged by morning.
 ```
+
+Trivial or conversational prompts ("what does git rebase -i do") get a direct answer, with no playbook and no subagents. For everything else the orchestrator:
+
+1. matches your task to a playbook and opens a `todo` list whose first items are its steps, copied in verbatim.
+2. routes to the other skills as the steps fire.
+3. writes unslopped replies framed for the consumer and the maintainer.
+
+`/orchestrator off` stops the injection for the current session, `/orchestrator on` restores it, and `/orchestrator status` shows which is active. It is on by default.
+
+New here? The [guide](./docs/guide/README.md) walks through a first real task, from setup and prompting through verification and overnight runs. Stuck, or unsure which skill fits? Ask [`/skill:orchestrator-help`](./skills/orchestrator-help/SKILL.md). The full rules live in [`skills/orchestrator/SKILL.md`](./skills/orchestrator/SKILL.md).
+
+### Playbooks
 
 <details>
 <summary>the twenty-three playbooks</summary>
@@ -93,30 +70,16 @@ morning.
 
 </details>
 
+## Skills
 
-
-when invoked it:
-
-1. matches your task to a [playbook](./skills/orchestrator/playbooks/) and opens a todo list whose first items are its steps, copied in verbatim.
-2. routes to the other skills as the steps fire.
-3. writes unslopped replies framed for the consumer and the maintainer.
-
-the full rules and playbooks live in [`skills/orchestrator/SKILL.md`](./skills/orchestrator/SKILL.md).
-
-to keep [`/orchestrator`](./skills/orchestrator/SKILL.md) on across turns, pick it from the `/` menu and press option+enter (mac) or alt+enter (windows) instead of enter. that makes it a [custom mode](https://cursor.com/docs/skills#using-a-skill-as-a-custom-mode), which cursor offers in the agents window and the cli. it stays in context every turn until you exit the mode. plain enter attaches it to one message only.
-
-[`/orchestrator`](./skills/orchestrator/SKILL.md) works extremely well with cursor's `/loop` command. you can make cursor work for many hours without sacrificing rigor.
-
-## skills
-
-[`/orchestrator`](./skills/orchestrator/SKILL.md) runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `unslop`, `no-comments`, `technical-writing`, `tdd`, and the principles). the table below is for when you want one directly:
+The orchestrator runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `unslop`, `no-comments`, `technical-writing`, `tdd`, and the principles). Type `/skill:<name>` to run one directly:
 
 ```
-/how do we cancel runs? do we have an n+1 when we look up every run to cancel?
+/skill:how do we cancel runs? do we have an n+1 when we look up every run to cancel?
 ```
 
 ```
-/interrogate review this pr.
+/skill:interrogate review this pr.
 ```
 
 <details>
@@ -124,105 +87,87 @@ to keep [`/orchestrator`](./skills/orchestrator/SKILL.md) on across turns, pick 
 
 | skill | use it when |
 |---|---|
-| [`/orchestrator`](./skills/orchestrator/SKILL.md) | default entry point for any non-trivial task. |
-| [`/orchestrator-help`](./skills/orchestrator-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. runs only when you type `/orchestrator-help`. |
-| [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. runs only when you type `/in-your-own-words`. |
-| [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it: what a top professional would do that you didn't ask for, the raw material they'd start from, their methods and tools, and an outside check that the result is right. hands back the rewritten prompt and leaves your choices open. doesn't do the task. runs only when you type `/sharpen`. |
-| [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
-| [`/why`](./skills/why/SKILL.md) | you want to know why something was built this way. discovers available MCPs at run time and queries each evidence category in parallel (source control, issue tracker, long-form docs, real-time chat, infra observability, error tracking, analytics warehouse). |
-| [`/recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
-| [`/ketchup`](./skills/ketchup/SKILL.md) | you want what changed in this chat since your last message, in plain words and small visuals, with every item waiting on you listed and decidable from the reply alone, even when that makes the reply long. |
-| [`/ketchup-video`](./skills/ketchup-video/SKILL.md) | you want the `/ketchup` catch-up as a short subtitled video of slides, with the calls waiting on you as text under it. |
-| [`/blast-radius`](./skills/blast-radius/SKILL.md) | you have a small-looking change and want to know what else it could break, with the one fact it's safe because of proven by running code, not asserted. |
-| [`/architect`](./skills/architect/SKILL.md) | you're about to write code that crosses a function boundary and want the caller's usage, types, and module shape settled first. |
-| [`/arena`](./skills/arena/SKILL.md) | you want N parallel attempts at the same thing, then to grab the best parts of each. |
-| [`/swarm`](./skills/swarm/SKILL.md) | you want N parallel workers across different slices or races, then one aggregated report. |
-| [`/interrogate`](./skills/interrogate/SKILL.md) | you have a diff and want different models to try to break it, keeping only findings a run proves. |
-| [`/automate-me`](./skills/automate-me/SKILL.md) | you want your own `-mode` skill, drafted from how you've actually worked. |
-| [`/make-bot-ui`](./skills/make-bot-ui/SKILL.md) | you want a page or dashboard whose buttons wake a Grok Bot over a webhook, including the sender-key handoff and Tailscale. |
-| [`/setup-orchestrator`](./skills/setup-orchestrator/SKILL.md) | you want to pick which models pstack uses per role. detects your models and writes a config rule. |
-| [`/reflect`](./skills/reflect/SKILL.md) | a long task landed and you want the recipe captured as a skill edit. |
-| [`/correct`](./skills/correct/SKILL.md) | you keep correcting agents for the same mistakes. mines history for mistake classes, fixes each at the highest level that works (architecture, then types, lint, and ci, then tests, with docs last), and keeps a table pairing each rule with what enforces it. |
-| [`/teach`](./skills/teach/SKILL.md) | you want to actually understand a change or subsystem, not just have it summarized. runs how + why and weaves one plain explanation, built up diagram by diagram. |
-| [`/tdd`](./skills/tdd/SKILL.md) | you're fixing a bug and there's a cheap local test path. write the failing test first, then the fix. |
-| [`/benchmark-checklist`](./skills/benchmark-checklist/SKILL.md) | you ran a benchmark or measured a speedup or regression. vets the number (limiter, tuning, errors, repeat runs, end-to-end relevance) before you report or act on it. |
-| [`/no-comments`](./skills/no-comments/SKILL.md) | strip comments before review; spawns Comment Sicko, fixes accepted findings, offers encodings for claimed constraints. |
-| [`/typescript-best-practices`](./skills/typescript-best-practices/SKILL.md) | you're reading or editing typescript. grounds the type-system-discipline principle in syntax. |
-| [`/figure-it-out`](./skills/figure-it-out/SKILL.md) | no bundled playbook fits. designs a rigorous, auditable playbook for the task. |
-| [`/show-me-your-work`](./skills/show-me-your-work/SKILL.md) | you want a reviewable decision trail. logs decisions to a tsv you can commit. |
-| [`/create-verification-skill`](./skills/create-verification-skill/SKILL.md) | your project has no scripted way to prove app behavior. generates a project-local verify skill with a feature map, for any language or platform. |
-| [`/maintain-verification-skill`](./skills/maintain-verification-skill/SKILL.md) | your verify skill's feature map has drifted from the app. source wave + one live pass, at most one PR of proven corrections. |
-| [`/create-formal-verification-skill`](./skills/create-formal-verification-skill/SKILL.md) | tests can't reach the case that breaks a race, retry, state machine, parser, or unsafe code. verifies one property with the tool that fits and generates a project-local skill to recheck it on every change. |
-| [`/maintain-formal-verification-skill`](./skills/maintain-formal-verification-skill/SKILL.md) | code your formal verification covers has changed since it was last checked. updates the model, harness, or properties to match the code, reruns, and says whether each failure is drift in the verification or a bug in the code. |
-| [`/statechart`](./skills/statechart/SKILL.md) | someone who owns the behavior needs to see it, not read a spec. checks a tla+ model, draws what the user sees as a mermaid statechart, marks each state that breaks a rule, and gives the shortest path to each one. |
-| [`/unslop`](./skills/unslop/SKILL.md) | you're cleaning up writing. removes AI tells. |
-| [`/bro`](./skills/bro/SKILL.md) | you want the last message restated in plain human language, no jargon. |
-| [`/technical-writing`](./skills/technical-writing/SKILL.md) | layered doc standard (Diátaxis + Google developer style + STE + Global English) for docs, RFCs, readmes, PR descriptions, commit messages. |
+| [`/skill:orchestrator`](./skills/orchestrator/SKILL.md) | the entry point for any non-trivial task. always on through the extension; type it only to load the rules explicitly. |
+| [`/skill:orchestrator-help`](./skills/orchestrator-help/SKILL.md) | you're new to orchestrator, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. runs only when you type `/skill:orchestrator-help`. |
+| [`/skill:in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. runs only when you type `/skill:in-your-own-words`. |
+| [`/skill:sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it: what a top professional would do that you didn't ask for, the raw material they'd start from, their methods and tools, and an outside check that the result is right. hands back the rewritten prompt and leaves your choices open. doesn't do the task. runs only when you type `/skill:sharpen`. |
+| [`/skill:how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
+| [`/skill:why`](./skills/why/SKILL.md) | you want to know why something was built this way. discovers available MCPs at run time and queries each evidence category in parallel (source control, issue tracker, long-form docs, real-time chat, infra observability, error tracking, analytics warehouse). |
+| [`/skill:recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
+| [`/skill:ketchup`](./skills/ketchup/SKILL.md) | you want what changed in this chat since your last message, in plain words and small visuals, with every item waiting on you listed and decidable from the reply alone, even when that makes the reply long. |
+| [`/skill:blast-radius`](./skills/blast-radius/SKILL.md) | you have a small-looking change and want to know what else it could break, with the one fact it's safe because of proven by running code, not asserted. |
+| [`/skill:architect`](./skills/architect/SKILL.md) | you're about to write code that crosses a function boundary and want the caller's usage, types, and module shape settled first. |
+| [`/skill:arena`](./skills/arena/SKILL.md) | you want N parallel attempts at the same thing, then to grab the best parts of each. |
+| [`/skill:swarm`](./skills/swarm/SKILL.md) | you want N parallel workers across different slices or races, then one aggregated report. |
+| [`/skill:interrogate`](./skills/interrogate/SKILL.md) | you have a diff and want different models to try to break it, keeping only findings a run proves. |
+| [`/skill:automate-me`](./skills/automate-me/SKILL.md) | you want your own `-mode` skill, drafted from how you've actually worked. |
+| [`/skill:setup-orchestrator`](./skills/setup-orchestrator/SKILL.md) | you want to pick which models orchestrator uses per role. detects your models and writes `~/.pi/agent/orchestrator-models.md`. |
+| [`/skill:reflect`](./skills/reflect/SKILL.md) | a long task landed and you want the recipe captured as a skill edit. |
+| [`/skill:correct`](./skills/correct/SKILL.md) | you keep correcting agents for the same mistakes. mines history for mistake classes, fixes each at the highest level that works (architecture, then types, lint, and ci, then tests, with docs last), and keeps a table pairing each rule with what enforces it. |
+| [`/skill:teach`](./skills/teach/SKILL.md) | you want to actually understand a change or subsystem, not just have it summarized. runs how + why and weaves one plain explanation, built up diagram by diagram. |
+| [`/skill:tdd`](./skills/tdd/SKILL.md) | you're fixing a bug and there's a cheap local test path. write the failing test first, then the fix. |
+| [`/skill:benchmark-checklist`](./skills/benchmark-checklist/SKILL.md) | you ran a benchmark or measured a speedup or regression. vets the number (limiter, tuning, errors, repeat runs, end-to-end relevance) before you report or act on it. |
+| [`/skill:no-comments`](./skills/no-comments/SKILL.md) | strip comments before review; spawns Comment Sicko, fixes accepted findings, offers encodings for claimed constraints. |
+| [`/skill:typescript-best-practices`](./skills/typescript-best-practices/SKILL.md) | you're reading or editing typescript. grounds the type-system-discipline principle in syntax. |
+| [`/skill:figure-it-out`](./skills/figure-it-out/SKILL.md) | no bundled playbook fits. designs a rigorous, auditable playbook for the task. |
+| [`/skill:show-me-your-work`](./skills/show-me-your-work/SKILL.md) | you want a reviewable decision trail. logs decisions to a tsv you can commit. |
+| [`/skill:create-verification-skill`](./skills/create-verification-skill/SKILL.md) | your project has no scripted way to prove app behavior. generates a project-local verify skill with a feature map, for any language or platform. |
+| [`/skill:maintain-verification-skill`](./skills/maintain-verification-skill/SKILL.md) | your verify skill's feature map has drifted from the app. source wave + one live pass, at most one PR of proven corrections. |
+| [`/skill:create-formal-verification-skill`](./skills/create-formal-verification-skill/SKILL.md) | tests can't reach the case that breaks a race, retry, state machine, parser, or unsafe code. verifies one property with the tool that fits and generates a project-local skill to recheck it on every change. |
+| [`/skill:maintain-formal-verification-skill`](./skills/maintain-formal-verification-skill/SKILL.md) | code your formal verification covers has changed since it was last checked. updates the model, harness, or properties to match the code, reruns, and says whether each failure is drift in the verification or a bug in the code. |
+| [`/skill:statechart`](./skills/statechart/SKILL.md) | someone who owns the behavior needs to see it, not read a spec. checks a tla+ model, draws what the user sees as a mermaid statechart, marks each state that breaks a rule, and gives the shortest path to each one. |
+| [`/skill:unslop`](./skills/unslop/SKILL.md) | you're cleaning up writing. removes AI tells. |
+| [`/skill:bro`](./skills/bro/SKILL.md) | you want the last message restated in plain human language, no jargon. |
+| [`/skill:technical-writing`](./skills/technical-writing/SKILL.md) | layered doc standard (Diátaxis + Google developer style + STE + Global English) for docs, RFCs, readmes, PR descriptions, commit messages. |
 
 </details>
-
-
-
-### examples
-
-mostly i type [`/orchestrator`](./skills/orchestrator/SKILL.md) at the start of a task and let it route to a playbook. the other skills fire as the steps need them. a few i reach for directly.
-
 
 <details>
-<summary>all the examples</summary>
+<summary>example prompts</summary>
 
 ```
-bug fix:           /orchestrator this pr has a subtle bug where the scroll drifts every 750ms even
-                   when idle. repro first, then fix and verify.
-perf:              /orchestrator a big list takes a second or two to load even though we virtualize.
-                   run a cpu trace and tell me why.
-feature:           /orchestrator build a small feature behind a feature flag. verify it really works.
-prototype:         /orchestrator build two prototypes of the markdown renderer so we can compare.
-                   spawn an agent for each.
-multi-phase:       /orchestrator open source these skills as a plugin. nothing internal leaks, work
-                   in a temp dir, show me the dependency graph first.
-overnight run:     /orchestrator i'm going to bed. land the stack even if ci flakes. i want
-                   everything merged by morning.
-babysit:           /orchestrator check on pr 123. anything outstanding?
-visual parity:     /orchestrator the row spacing is too tall when this flag is on. the second image
-                   is correct. repro and fix until it matches.
-figure it out:     /orchestrator i'm stepping away. migrate every caller from the synchronous store
-                   to the new async one, keeping behavior identical. i want to trust it was done
-                   right when i'm back.
-how:               /how do we cancel runs? do we have an n+1 when we look up every run to cancel?
-why:               /why is this feature flag not on yet?
-architect:         design this instrumentation to be high signal with no false positives. /architect
-                   this first.
-arena:             /arena take my prompt to the arena verbatim. i want to compare their proposals
-                   with yours.
-swarm:             /swarm check every package under packages/ against its check.sh. one worker per
-                   package. one report.
-interrogate:       /interrogate review this pr.
-tdd:               /tdd implement
+bug fix:           this pr has a subtle bug where the scroll drifts every 750ms even when idle.
+                   repro first, then fix and verify.
+perf:              a big list takes a second or two to load even though we virtualize. run a cpu
+                   trace and tell me why.
+feature:           build a small feature behind a feature flag. verify it really works.
+prototype:         build two prototypes of the markdown renderer so we can compare. spawn an agent
+                   for each.
+multi-phase:       open source these skills as a package. nothing internal leaks, work in a temp
+                   dir, show me the dependency graph first.
+overnight run:     i'm going to bed. land the stack even if ci flakes. i want everything merged by
+                   morning.
+babysit:           check on pr 123. anything outstanding?
+visual parity:     the row spacing is too tall when this flag is on. the second image is correct.
+                   repro and fix until it matches.
+figure it out:     i'm stepping away. migrate every caller from the synchronous store to the new
+                   async one, keeping behavior identical. i want to trust it was done right when
+                   i'm back.
+how:               /skill:how do we cancel runs? do we have an n+1 when we look up every run to
+                   cancel?
+why:               /skill:why is this feature flag not on yet?
+architect:         design this instrumentation to be high signal with no false positives.
+                   /skill:architect this first.
+arena:             /skill:arena take my prompt to the arena verbatim. i want to compare their
+                   proposals with yours.
+swarm:             /skill:swarm check every package under packages/ against its check.sh. one
+                   worker per package. one report.
+interrogate:       /skill:interrogate review this pr.
+tdd:               /skill:tdd implement
 unslop:            can we unslop and tighten the new changes?
-reflect:           /reflect that took too long. capture what we learned so the next run doesn't
-                   repeat it.
-correct:           /correct
-show-me-your-work: /show-me-your-work keep a decision trail i can review when i'm back.
-automate-me:       /automate-me
-help:              /orchestrator-help which skill should i use to review this branch?
+reflect:           /skill:reflect that took too long. capture what we learned so the next run
+                   doesn't repeat it.
+correct:           /skill:correct
+show-me-your-work: /skill:show-me-your-work keep a decision trail i can review when i'm back.
+automate-me:       /skill:automate-me
+help:              /skill:orchestrator-help which skill should i use to review this branch?
 ```
 
 </details>
 
-## the `orchestrator-agent` and Comment Sicko subagents
+### Principles
 
-[`/orchestrator`](./skills/orchestrator/SKILL.md) runs in the chat that receives it. that chat owns the playbook, the todo list, and every subagent spawn.
-
-pstack also ships [`subagent_type: "orchestrator-agent"`](./agents/orchestrator-agent.md) as the wrapper for delegates spawned during a run. it reads `orchestrator` in full, including its inline principles index, before doing any work. substituting `generalPurpose` skips that read and drifts. do not spawn `orchestrator-agent` to run the playbook itself.
-
-[`/orchestrator`](./skills/orchestrator/SKILL.md) and [`subagent_type: "orchestrator-agent"`](./agents/orchestrator-agent.md) route through the same wrapper.
-
-pstack also ships [Comment Sicko](./agents/comment-sicko.md), a read-only comment reviewer available as `subagent_type: "comment-sicko"`. usually invoke it through [`/no-comments`](./skills/no-comments/SKILL.md), not directly.
-
-## principles
-
-twenty-four short skills, one principle each. `orchestrator` indexes them inline and reads that index at task start. the standalone files are there so other skills can reference a principle by name, and so the index can point at the full rule for each.
+Twenty-four short skills, one principle each. `orchestrator` indexes them inline and reads that index at task start. The standalone files let other skills reference a principle by name, and let the index point at the full rule for each.
 
 <details>
 <summary>all twenty-four principles</summary>
@@ -256,36 +201,30 @@ twenty-four short skills, one principle each. `orchestrator` indexes them inline
 
 </details>
 
-## not shipped here
+## Models
 
-a few things `orchestrator` references but doesn't bundle:
+Role lines live in `~/.pi/agent/orchestrator-models.md`: one `role: provider/model:thinking` per line, no frontmatter. A panel role takes a comma-separated list. `inherit-parent` or `auto` runs the agent on the parent model. The extension injects the file next to the orchestrator skill, and every spawn passes the role's `model` and `thinking` to `Agent`.
 
-- `/deslop` and the `deslop` skill ship in the `cursor-team-kit` plugin.
-- `control-cli` (for CLIs and TUIs) and `control-ui` (for browser, Electron, web) ship in `cursor-team-kit` too.
-- `/create-skill` is a cursor built-in. cursor also ships a built-in `/autopilot` that watches a pr. inside `orchestrator`, pr-status requests go to the [babysit playbook](./skills/orchestrator/playbooks/babysit.md) instead.
+[`/skill:setup-orchestrator`](./skills/setup-orchestrator/SKILL.md) writes the file. It lists your models with `pi --list-models`, maps the reasoning budget you pick onto the `:thinking` suffix (`max`, `xhigh`, `high`, `medium`), and lets you change any role. A missing file or line falls back to these defaults:
 
-install `cursor-team-kit` alongside pstack if you want the full set.
+```
+code delegates (feature, refactoring, bug-fix, perf-issue, hillclimb, swarm workers): openai/gpt-6.1-terra:high
+how explorer, why investigators, reflect tooling: openai/gpt-6.1-terra:medium
+judgment and prose, hardest tasks, how explainer, why synthesizer, reflect judgment/divergent/synthesizer: anthropic/claude-opus-5-5:xhigh
+arena runners, arena cross-judge pool, architect runners, interrogate reviewers: anthropic/claude-opus-5-5:xhigh, openai/gpt-6.1-sol:high
+```
 
-## why are there no planning skills?
+When a default changes, a file written before the change still pins the old value. Delete those role lines, or the whole file, then run `/skill:setup-orchestrator` again. A rerun keeps any role whose model differs from the default.
 
-cursor already has a great plan mode which works great with pstack. but personally, i don't believe in planning. the best spec is code. if you do want to make a plan, [`/orchestrator`](./skills/orchestrator/SKILL.md) covers it, but it's not a default. 
+## Subagents
 
-## make it yours
+The main session owns the playbook, the `todo` list, and every `Agent` spawn. The package ships two agents:
 
-`orchestrator` is my style. you may not want exactly that.
+- [`orchestrator-agent`](./agents/orchestrator-agent.md) is the code-writing delegate spawned during a run. It has every tool and uses `prompt_mode: append`, so it inherits the parent prompt, orchestrator rules included. It pins no model; the caller passes the role's `model` and `thinking`. Spawn a fresh one per task, and never spawn it to run a playbook itself.
+- [`comment-sicko`](./agents/comment-sicko.md) is a read-only comment reviewer (`read, grep, find, ls, bash`, `prompt_mode: replace`, so it gets no orchestrator rules). Run it through [`/skill:no-comments`](./skills/no-comments/SKILL.md) rather than directly.
 
-type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent transcripts, drafts a `<your-name>-mode` skill from how you've actually worked, and routes through pstack underneath. you keep pstack as the base and end up with your own routing skill alongside `orchestrator`.
+Your own agents in `~/.pi/agent/agents/<name>.md` (global) or `.pi/agents/<name>.md` (project) keep working alongside these. pi-subagents ranks package agents below every agent you write, so a file of yours with the same name, such as `~/.pi/agent/agents/orchestrator-agent.md`, overrides the shipped one. `/agents` lists the shipped agents read-only, with Eject (an editable copy that shadows the original) and Disable.
 
-models are configurable too. type [`/setup-orchestrator`](./skills/setup-orchestrator/SKILL.md). it detects the models you have access to and writes a small always-applied rule mapping each role (code, judgment, the review panels) to a model. every skill reads it and falls back to sensible defaults when the rule is absent, so you override only what you want.
+## Credits
 
-when a default changes, a rule written before the change still pins the old default. delete those role lines, or delete the file, then run `/setup-orchestrator` again. a rerun keeps any role whose model differs from the default.
-
-## automations
-
-pstack also ships a dormant [benny automation pack](./automations/benny/). benny triages slack issue reports, then reproduces and fixes confirmed bugs with real ui evidence. its files are not registered as slash skills.
-
-to set it up, point cursor at [`FOR_AGENTS.md`](./automations/benny/FOR_AGENTS.md). setup copies the pack into the target repository at `.cursor/automations/benny/`, enables pstack there for shared skills, and keeps user configuration outside the copied pack. benny runs on cursor automations, so it is cursor-only.
-
-## license
-
-MIT
+Forked from [pstack](https://github.com/cursor/plugins/tree/main/pstack) by Lauren Tan, MIT. This package is MIT too; see [LICENSE](./LICENSE).
