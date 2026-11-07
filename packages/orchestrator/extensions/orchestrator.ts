@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Box, Spacer, Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
 
@@ -67,40 +67,49 @@ const EventSchema = Type.Union([
 ]);
 const ParamsSchema = Type.Object({ event: EventSchema }, Closed);
 type FlowEvent = Static<typeof EventSchema>;
-type Row = { glyph: string; title: string; result: string; tone: "success" | "warning" | "muted" | "error" };
+type Tone = "success" | "warning" | "muted" | "error";
+// The call line reads `Orchestrator: <lead> <key><tail>` with only the key bold; the result line is `<status> · <note>`.
+type Row = { lead: string; key: string; tail: string; status: string; note: string; tone: Tone };
+
+const row = (lead: string, key: string, status: string, tone: Tone, note = "", tail = ""): Row => ({ lead, key, tail, status, note, tone });
 
 function present(event: FlowEvent): Row {
 	switch (event.kind) {
 		case "trivial":
-			return { glyph: "∅", title: "Trivial task, skipping.", result: "✓ recorded", tone: "success" };
+			return row("", "Trivial task", "✓ recorded", "success", "", ", skipping.");
 		case "principles":
-			return { glyph: "›", title: "Reading principles", result: "✓ recorded", tone: "success" };
+			return row("", "Reading principles", "✓ recorded", "success");
 		case "playbook":
-			return { glyph: "→", title: `Playbook: ${event.name}`, result: "✓ matched", tone: "success" };
-		case "skill": {
-			const title = event.name.startsWith("principle-")
-				? `Reading principle ${event.name.slice("principle-".length).split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}`
-				: `Opening skill ${event.name}`;
-			return { glyph: "›", title, result: "✓ recorded", tone: "success" };
-		}
+			return row("Playbook", event.name, "✓ matched", "success");
+		case "skill":
+			return event.name.startsWith("principle-")
+				? row("Reading principle", event.name.slice("principle-".length).split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "), "✓ recorded", "success")
+				: row("Opening skill", event.name, "✓ recorded", "success");
 		case "step": {
-			const title = `${event.playbook} ${event.step}. ${event.title}`;
+			const lead = `${event.playbook} ${event.step}.`;
 			switch (event.status) {
-				case "started": return { glyph: "→", title, result: "◐ started", tone: "warning" };
-				case "completed": return { glyph: "→", title, result: "● completed", tone: "success" };
-				case "skipped": return { glyph: "→", title, result: `⊘ skipped · ${event.reason}`, tone: "muted" };
-				case "blocked": return { glyph: "→", title, result: `◐ blocked · ${event.reason}`, tone: "warning" };
+				case "started": return row(lead, event.title, "◐ started", "warning");
+				case "completed": return row(lead, event.title, "● completed", "success");
+				case "skipped": return row(lead, event.title, "⊘ skipped", "muted", event.reason);
+				case "blocked": return row(lead, event.title, "◐ blocked", "warning", event.reason);
 			}
 		}
 		case "verify": {
-			const title = `Verification ${event.status}`;
+			const key = `Verification ${event.status}`;
 			switch (event.status) {
-				case "passed": return { glyph: "›", title, result: `✓ passed · ${event.evidence}`, tone: "success" };
-				case "failed": return { glyph: "›", title, result: `✗ failed · ${event.evidence}`, tone: "error" };
-				case "skipped": return { glyph: "›", title, result: `⊘ skipped · ${event.reason}`, tone: "muted" };
+				case "passed": return row("", key, "✓ passed", "success", event.evidence);
+				case "failed": return row("", key, "✗ failed", "error", event.evidence);
+				case "skipped": return row("", key, "⊘ skipped", "muted", event.reason);
 			}
 		}
 	}
+}
+
+// Self-drawn so the row gets the accent-tinted message background instead of the shared tool background.
+function shell(theme: { bg: (name: "customMessageBg" | "toolErrorBg", text: string) => string }, context: { outputPad: number; isError: boolean }, children: (Text | Spacer)[]): Box {
+	const box = new Box(context.outputPad, 0, (text) => theme.bg(context.isError ? "toolErrorBg" : "customMessageBg", text));
+	for (const child of children) box.addChild(child);
+	return box;
 }
 
 function terminalLine(text: string): string {
@@ -118,6 +127,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Orchestrator",
 		description: "Record one orchestrator flow marker in the main session. This tool does not read skills, run steps, or verify outcomes.",
 		parameters: ParamsSchema,
+		renderShell: "self",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			if (agentName(ctx.getSystemPrompt()) !== undefined) throw new Error("Orchestrator markers are available only in the main session.");
 			if (!isEnabled(ctx)) throw new Error("Orchestrator is disabled for this session.");
@@ -126,24 +136,26 @@ export default function (pi: ExtensionAPI) {
 			if (params.event.kind === "verify" && params.event.status === "failed") text += " Fix the cause and verify again before reporting.";
 			return { content: [{ type: "text", text }], details: { event: params.event } };
 		},
-		renderCall(args, theme) {
-			let text = theme.fg("toolTitle", theme.bold("Orchestrator "));
+		renderCall(args, theme, context) {
+			let text = theme.fg("accent", "▌ ") + theme.fg("accent", theme.bold("Orchestrator:"));
 			if (Check(ParamsSchema, args)) {
-				const row = present(args.event);
-				text += theme.fg("muted", row.glyph) + " " + theme.fg("dim", terminalLine(row.title));
+				const r = present(args.event);
+				if (r.lead) text += " " + theme.fg("text", terminalLine(r.lead));
+				text += " " + theme.fg("text", theme.bold(terminalLine(r.key))) + theme.fg("text", r.tail);
 			}
-			return new Text(text, 0, 0);
+			return shell(theme, context, [new Spacer(1), new Text(text, 0, 0)]);
 		},
 		renderResult(result, _options, theme, context) {
+			const bar = theme.fg("accent", "▌ ");
+			let text = bar + theme.fg("muted", "recorded");
 			if (context.isError) {
 				const message = result.content.find((item) => item.type === "text")?.text.split("\n")[0] ?? "";
-				return new Text(theme.fg("error", `✗ ${terminalLine(message)}`), 0, 0);
+				text = bar + theme.fg("error", `✗ ${terminalLine(message)}`);
+			} else if (Check(ParamsSchema, result.details)) {
+				const r = present(result.details.event);
+				text = bar + theme.fg(r.tone, r.status) + (r.note ? theme.fg("text", ` · ${terminalLine(r.note)}`) : "");
 			}
-			if (Check(ParamsSchema, result.details)) {
-				const row = present(result.details.event);
-				return new Text(theme.fg(row.tone, terminalLine(row.result)), 0, 0);
-			}
-			return new Text(theme.fg("muted", "recorded"), 0, 0);
+			return shell(theme, context, [new Text(text, 0, 0), new Spacer(1)]);
 		},
 	});
 	// Files are read every turn so edits apply without /reload.
