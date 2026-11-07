@@ -8,39 +8,35 @@ disable-model-invocation: true
 
 Mine the current conversation for durable learnings, then route them into skill edits.
 
-Invoke when the user says "reflect" or "/reflect". Skip when the conversation is trivial, off-topic, or already covered by an existing skill the parent followed correctly. One-offs are not learnings.
+Invoke when the user says "reflect" or "/skill:reflect". Skip when the conversation is trivial, off-topic, or already covered by an existing skill the parent followed correctly. One-offs are not learnings.
 
 ## 1. Locate the active transcript
 
-Before fanning out, find this conversation's transcript in the `agent-transcripts/` directory the system prompt names. Do not glob across `~/.cursor/projects/*/`. That crosses workspace boundaries and reads private chats from unrelated projects.
+Before fanning out, use `$PI_SESSION_FILE` from `bash` for this conversation's transcript when set. Otherwise, look only in `~/.pi/agent/sessions/<slug>/`, where `<slug>` is `--` plus the workspace's absolute path without its leading `/`, with other `/` characters replaced by `-`, plus `--`. Do not search across workspace folders; that reads private chats from unrelated projects.
 
-```bash
-ls -t <agent-transcripts>/*.jsonl <agent-transcripts>/*/*.jsonl <agent-transcripts>/*/subagents/*.jsonl 2>/dev/null | head -10
-```
-
-That covers the legacy flat (`<id>.jsonl`), current nested (`<id>/<id>.jsonl`), and subagent (`<parent>/subagents/<child>.jsonl`) layouts. For each candidate, read the first JSONL line. Take the file whose `message.content[0].text` contains the conversation's opening user prompt. If none matches, pass a tight digest of the session instead.
+Session files are `<timestamp>_<uuid>.jsonl`; their first line is a session header, not a user message. Match the opening user message and conversation context to identify the active session; do not rely on recency alone. If no file can be identified unambiguously, pass a tight digest of the session instead.
 
 ## 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: generalPurpose`, agent mode (`readonly: false`). Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references, and readonly strips MCPs.
+One message, three background `Agent` calls, `subagent_type: "general-purpose"`. Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references. Tell them not to edit files.
 
-Each reviewer and the synthesizer name a role line in the `pstack-models.mdc` rule and a default. Set `model` to that line's value, or to the default if the rule or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message. Pick each subagent's reasoning level and fast or standard speed for the job, per the Subagents section of the **orchestrator** skill.
+Each reviewer and the synthesizer name a role line in `~/.pi/agent/orchestrator-models.md` and a default. The role lines are injected into context; if not, read the file. Use the line's value, or the default if the file or line is missing. Split `provider/model:thinking` into `model` and `thinking` for `Agent`; omit both when the value is `auto` or `inherit-parent`. If a model cannot be resolved and the agent falls back to the parent, say so and use the default when available. If the default is unavailable, use the closest available model of the same family and say so.
 
-| Lens | Role line | Default `model` | Prompt template |
+| Lens | Role line | Default `model:thinking` | Prompt template |
 |---|---|---|---|
-| Judgment | `reflect judgment, divergent, synthesizer` | `claude-opus-5-5-xhigh` | `references/judgment-reviewer.md` |
-| Tooling | `reflect tooling` | `grok-4.7-xhigh-fast` | `references/tooling-reviewer.md` |
-| Divergent | `reflect judgment, divergent, synthesizer` | `claude-opus-5-5-xhigh` | `references/divergent-reviewer.md` |
+| Judgment | `reflect judgment, divergent, synthesizer` | `anthropic/claude-opus-5-5:xhigh` | `references/judgment-reviewer.md` |
+| Tooling | `reflect tooling` | `openai/gpt-6.1-terra:medium` | `references/tooling-reviewer.md` |
+| Divergent | `reflect judgment, divergent, synthesizer` | `anthropic/claude-opus-5-5:xhigh` | `references/divergent-reviewer.md` |
 
-Pass each template verbatim, substituting the transcript path or digest where marked. Reviewers return findings in the `Task` response body.
+Pass each template verbatim, substituting the transcript path or digest where marked. After completion notifications, use `get_subagent_result` to retrieve each reviewer's full findings.
 
 ## 3. Synthesize
 
-One `Task` call, `subagent_type: generalPurpose`, `model` from the `reflect judgment, divergent, synthesizer` line (default `claude-opus-5-5-xhigh`), agent mode (`readonly: false`). It spot-verifies citations through MCP, and readonly strips MCPs. Pass `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. It returns an Accepted / Rejected / Backlog list.
+One background `Agent` call, `subagent_type: "general-purpose"`, model and thinking from the `reflect judgment, divergent, synthesizer` line (default `anthropic/claude-opus-5-5:xhigh`). It spot-verifies citations through MCP; tell it not to edit files. Pass `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. After its completion notification, use `get_subagent_result` to retrieve its Accepted / Rejected / Backlog list.
 
 ## 4. Structural enforcement check
 
-Move any Accepted item that a lint rule, script, metadata flag, or runtime check would enforce more reliably to Backlog. See the **encode-lessons-in-structure** principle skill.
+Move any Accepted item that a lint rule, script, metadata flag, or runtime check would enforce more reliably to Backlog. Read `../principle-encode-lessons-in-structure/SKILL.md` and follow it.
 
 ## 5. Apply
 
@@ -48,14 +44,16 @@ Present the synthesizer's full Accepted / Rejected / Backlog output and wait for
 
 File each Backlog item to your team's devex or backlog tracker without waiting. Only the Accepted list waits for approval.
 
-Never edit a skill under `plugins/cache/`. Before approval, show its destination, `.cursor/skills/<skill>/` or `~/.cursor/skills/<skill>/`. After approval, copy the skill folder there and edit the copy. Never open a PR or push.
+Never edit a skill in an installed package. Before approval, show its destination: `.pi/skills/<skill>/` or `.agents/skills/<skill>/` for a project, or `~/.pi/agent/skills/<skill>/` or `~/.agents/skills/<skill>/` for the user. After approval, copy an installed package's skill folder there and edit the copy. Never open a PR or push.
+
+Skipped in pi: the built-in skill-creation handoff. pi has no built-in equivalent; use an available skill-creation skill as below, or report and skip these edits.
 
 Follow each approved row's Routing exactly:
 
 - Trivial existing-skill edit (a one-line bullet, a tightened sentence, a stale fact corrected): the parent does it directly.
-- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): hand to Cursor's built-in `create-skill` skill and run its draft / test / iterate loop.
-- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): hand to `create-skill` and run its description-optimization loop.
-- `new skill via create-skill: <kebab-name>`: hand creation to `create-skill`. Do not invent the shape ad hoc.
+- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): read an available skill-creation skill's `SKILL.md` and follow its draft / test / iterate loop.
+- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): read an available skill-creation skill's `SKILL.md` and follow it to optimize the description.
+- `new skill: <kebab-name>`: read an available skill-creation skill's `SKILL.md` and follow it to create the skill. Do not invent the shape ad hoc.
 
 If your environment ships a SKILL.md validator, run it on every touched skill before declaring done.
 
