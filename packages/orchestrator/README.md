@@ -214,7 +214,10 @@ code delegates (feature, refactoring, bug-fix, perf-issue, hillclimb, swarm work
 how explorer, why investigators, reflect tooling: openai/gpt-6.1-terra:medium
 judgment and prose, hardest tasks, how explainer, why synthesizer, reflect judgment/divergent/synthesizer: anthropic/claude-opus-5-5:xhigh
 arena runners, arena cross-judge pool, architect runners, interrogate reviewers: anthropic/claude-opus-5-5:xhigh, openai/gpt-6.1-sol:high
+escalation: anthropic/claude-fable-5-1:high
 ```
+
+A code delegate that fails the same check twice hands the next attempt to `hardest tasks`, then once more to `escalation`.
 
 When a default changes, a file written before the change still pins the old value. Delete those role lines, or the whole file, then run `/skill:setup-orchestrator` again. A rerun keeps any role whose model differs from the default.
 
