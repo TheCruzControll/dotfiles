@@ -11,19 +11,11 @@
     "npm:@juicesharp/rpiv-ask-user-question@2.15.0",
     "npm:pi-web-access@0.46.0",
     "npm:@juicesharp/rpiv-todo@2.15.0",
-    {
-      "source": "git:github.com/DietrichGebert/ponytail@96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
-      "skills": [
-        "!skills/ponytail-gain/SKILL.md",
-        "!skills/ponytail-audit/SKILL.md",
-        "!skills/ponytail-debt/SKILL.md",
-        "!skills/ponytail-help/SKILL.md"
-      ]
-    },
     "npm:@schovest/pi-goal",
     "npm:pi-btw",
     "npm:@maxiaochao/pi-background-tasks",
-    "npm:@tintinweb/pi-subagents@0.23.1"
+    "npm:@tintinweb/pi-subagents@0.23.1",
+    "../../dotfiles/packages/orchestrator"
   ],
   "skills": [
     "-/Users/franciscruz/.agents/skills/agents-sdk/SKILL.md",
@@ -70,7 +62,8 @@
   "extensionChangelogVersions": {
     "{\"source\":\"npm:pi-agent-browser-native@0.9.6\",\"scope\":\"user\"}": "0.9.6",
     "{\"source\":\"npm:pi-web-access@0.46.0\",\"scope\":\"user\"}": "0.46.0",
-    "{\"source\":\"npm:@maxiaochao/pi-background-tasks\",\"scope\":\"user\"}": "0.3.1"
+    "{\"source\":\"npm:@maxiaochao/pi-background-tasks\",\"scope\":\"user\"}": "0.3.1",
+    "{\"source\":\"npm:@tintinweb/pi-subagents@0.23.1\",\"scope\":\"user\"}": "0.23.1"
   },
   "hideThinkingBlock": false,
   "enableSkillCommands": true,
