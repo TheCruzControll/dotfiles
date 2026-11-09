@@ -133,6 +133,12 @@ export default function (pi: ExtensionAPI) {
 			if (!isEnabled(ctx)) throw new Error("Orchestrator is disabled for this session.");
 			let text = "Recorded. This marker does not perform or verify work.";
 			if (params.event.kind === "playbook") text += " Copy every step of its playbook file into todo verbatim, then mark each step with a step marker.";
+			if (params.event.kind === "step") text += {
+				started: " Set this step's todo to in_progress now.",
+				completed: " Mark this step's todo completed now, not in a later batch.",
+				skipped: " Mark this step's todo completed with `skip: <reason>` now.",
+				blocked: " Keep this step's todo in_progress and add a todo for the blocker.",
+			}[params.event.status];
 			if (params.event.kind === "verify" && params.event.status === "failed") text += " Fix the cause and verify again before reporting.";
 			return { content: [{ type: "text", text }], details: { event: params.event } };
 		},
